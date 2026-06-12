@@ -40,7 +40,8 @@ make_plist() {
   </array>
   <key>WorkingDirectory</key><string>$APPDIR</string>
   <key>EnvironmentVariables</key>
-  <dict><key>PYTHONUNBUFFERED</key><string>1</string></dict>
+  <dict><key>PYTHONUNBUFFERED</key><string>1</string>
+  <key>TIMELY_BACKUP_DIR</key><string>$PWD</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>$LOG</string>
@@ -76,6 +77,34 @@ case "${1:-status}" in
     rm -f "$PLIST"
     echo "removed."
     ;;
+  notify-on)
+    NPLIST="$HOME/Library/LaunchAgents/$LABEL.notify.plist"
+    launchctl bootout "gui/$(id -u)/$LABEL.notify" 2>/dev/null || true
+    sync_app
+    cat > "$NPLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$LABEL.notify</string>
+  <key>ProgramArguments</key>
+  <array><string>$PY</string><string>coach.py</string><string>notify</string></array>
+  <key>WorkingDirectory</key><string>$APPDIR</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+</dict></plist>
+EOF
+    launchctl bootstrap "gui/$(id -u)" "$NPLIST"
+    echo "✅ daily notifications on: 7:30am briefing, 6:30pm log-your-run nudge."
+    ;;
+  notify-off)
+    launchctl bootout "gui/$(id -u)/$LABEL.notify" 2>/dev/null || true
+    rm -f "$HOME/Library/LaunchAgents/$LABEL.notify.plist"
+    echo "notifications off."
+    ;;
   restart)
     sync_app
     launchctl kickstart -k "gui/$(id -u)/$LABEL"
@@ -100,6 +129,6 @@ case "${1:-status}" in
     tail -15 "$LOG" 2>/dev/null || echo "(no log yet)"
     ;;
   *)
-    echo "usage: ./lan.sh {install|url|status|restart|uninstall}"
+    echo "usage: ./lan.sh {install|url|status|restart|uninstall|notify-on|notify-off}"
     ;;
 esac

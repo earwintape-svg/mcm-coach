@@ -74,6 +74,11 @@ CREATE TABLE IF NOT EXISTS external_metrics(
   synced_at REAL,
   PRIMARY KEY(source, date)
 );
+CREATE TABLE IF NOT EXISTS kv(
+  k TEXT PRIMARY KEY,
+  v TEXT,
+  updated_at REAL
+);
 """
 
 
@@ -205,3 +210,37 @@ def get_annotations():
         rows = c.execute("SELECT * FROM annotations").fetchall()
     return {r["activity_id"]: {"rpe": r["rpe"], "note": r["note"],
                                "shoes": r["shoes"]} for r in rows}
+
+
+def set_kv(k, v):
+    init()
+    with _lock, _conn() as c:
+        c.execute("INSERT OR REPLACE INTO kv VALUES(?,?,?)",
+                  (k, json.dumps(v), time.time()))
+
+
+def get_kv(k):
+    """Returns (value, age_seconds) or (None, None)."""
+    init()
+    with _lock, _conn() as c:
+        row = c.execute("SELECT v, updated_at FROM kv WHERE k=?", (k,)).fetchone()
+    if row is None:
+        return None, None
+    return json.loads(row["v"]), time.time() - row["updated_at"]
+
+
+def backup(dest_dir):
+    """Online backup of the whole DB (safe while in use) into dest_dir.
+    The proprietary dataset should never live on exactly one disk."""
+    init()
+    dest = os.path.join(dest_dir, "timely-backup.db")
+    with _lock:
+        src = _conn()
+        try:
+            dst = sqlite3.connect(dest)
+            with dst:
+                src.backup(dst)
+            dst.close()
+        finally:
+            src.close()
+    return dest

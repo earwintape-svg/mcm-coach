@@ -63,9 +63,9 @@ def client():
 
 # ------------------------------------------------------------ Garmin reads
 
-def fetch_schedule(force=False):
-    if not force and _cache["sched"] is not None and time.time() - _cache["ts"] < 60:
-        return _cache["sched"]
+def _refresh_schedule():
+    """The slow path: ~9 Garmin calendar calls. Result is persisted, so the
+    app serves instantly from the store and refreshes in the background."""
     seen = {}
     c = client()
     for m in range(3, 12):
@@ -83,8 +83,23 @@ def fetch_schedule(force=False):
                     "date": it.get("date"),
                 }
     out = sorted(seen.values(), key=lambda x: (x["date"], x["title"]))
+    store.set_kv("schedule", out)
     _cache.update(sched=out, ts=time.time())
     return out
+
+
+def fetch_schedule(force=False):
+    if force:
+        return _refresh_schedule()
+    if _cache["sched"] is not None and time.time() - _cache["ts"] < 60:
+        return _cache["sched"]
+    cached, age = store.get_kv("schedule")
+    if cached is not None:
+        _cache.update(sched=cached, ts=time.time())
+        if age > 600:  # stale-while-revalidate: serve now, refresh behind
+            threading.Thread(target=_refresh_schedule, daemon=True).start()
+        return cached
+    return _refresh_schedule()
 
 
 def _weekly_of(runs):
@@ -333,12 +348,19 @@ def _main_target(payload):
             "fastSec": int(round(MILE / v_fast)), "slowSec": int(round(MILE / v_slow))}
 
 
+_PLAN_SUMMARY = None
+
+
 def plan_summary():
+    """The plan is static per process — build the 93 payloads once."""
+    global _PLAN_SUMMARY
+    if _PLAN_SUMMARY is not None:
+        return dict(_PLAN_SUMMARY, today=date.today().isoformat())
     plan = build_plan()
     weekly = {}
     for p in plan:
         weekly[p["week"]] = weekly.get(p["week"], 0.0) + p["distance_mi"]
-    return {
+    _PLAN_SUMMARY = {
         "race": RACE_DATE.isoformat(),
         "start": PLAN_START.isoformat(),
         "today": date.today().isoformat(),
@@ -346,6 +368,60 @@ def plan_summary():
         "planMiles": {p["name"]: round(p["distance_mi"], 1) for p in plan},
         "planTargets": {p["name"]: _main_target(p["payload"]) for p in plan},
     }
+    return dict(_PLAN_SUMMARY)
+
+
+# ------------------------------------------------------------ fitness math
+
+def _vdot_of(meters, sec):
+    """Jack Daniels: race-equivalent VDOT from a distance + time."""
+    import math
+    t = sec / 60.0
+    v = meters / t
+    vo2 = -4.60 + 0.182258 * v + 0.000104 * v * v
+    pct = (0.8 + 0.1894393 * math.exp(-0.012778 * t)
+           + 0.2989558 * math.exp(-0.1932605 * t))
+    return vo2 / pct
+
+
+def _predict_secs(meters, vdot):
+    """Time for a race distance at a given VDOT (bisection — vdot falls as
+    time rises)."""
+    lo, hi = 60 * 60.0, 60 * 420.0
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if _vdot_of(meters, mid) > vdot:
+            lo = mid
+        else:
+            hi = mid
+    return int((lo + hi) / 2)
+
+
+def fetch_fitness():
+    """Fitness trend from the store. Honest caveat baked in: these are
+    training runs, not races, so this is a floor — race-day VDOT reads
+    higher. Trend matters more than the absolute number."""
+    runs = store.get_runs()
+    weeks, best28 = {}, None
+    today = date.today()
+    for r in runs:
+        if not r.get("paceSec") or (r.get("mi") or 0) < 3:
+            continue
+        vd = _vdot_of(r["mi"] * MILE, r["mi"] * r["paceSec"])
+        if vd < 25 or vd > 75:
+            continue
+        wk = (date.fromisoformat(r["date"]) - PLAN_START).days // 7 + 1
+        if 1 <= wk <= 19:
+            weeks[wk] = max(weeks.get(wk, 0), round(vd, 1))
+        if (today - date.fromisoformat(r["date"])).days <= 28:
+            best28 = max(best28 or 0, vd)
+    if best28 is None:
+        return {}
+    msec = _predict_secs(42195, best28)
+    return {"current": round(best28, 1),
+            "weeks": [{"week": k, "vdot": v} for k, v in sorted(weeks.items())],
+            "marathon": "%d:%02d:%02d" % (msec // 3600, msec % 3600 // 60, msec % 60),
+            "goalGap": msec - (3 * 3600 + 25 * 60)}
 
 
 # ------------------------------------------------------------------- HTTP
@@ -406,6 +482,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(fetch_wellness("refresh=1" in self.path))
             elif route.startswith("/api/weather"):
                 self._json(fetch_weather())
+            elif route.startswith("/api/fitness"):
+                self._json(fetch_fitness())
             elif route.startswith("/api/run/"):
                 aid = route.split("/api/run/")[1]
                 if not aid.isdigit():           # activity ids are numeric
@@ -790,6 +868,7 @@ async function load(force){
    render();}).catch(()=>{});
   jget('/api/wellness').then(j=>{S.wellness=j;render();}).catch(()=>{});
   jget('/api/weather').then(j=>{S.weather=j;render();}).catch(()=>{});
+  jget('/api/fitness').then(j=>{S.fit=j;render();}).catch(()=>{});
  }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
 }
 function nav(d){S.month+=d;render();}
@@ -886,6 +965,14 @@ function renderActs(){
  const tot=runs.reduce((a,r)=>a+r.mi,0);
  let h='<h3>Activities <span style="color:var(--dim);font-weight:400">— '+
    runs.length+' runs · '+tot.toFixed(0)+' mi</span></h3>';
+ if(S.fit&&S.fit.current){
+  const gap=S.fit.goalGap,onTrack=gap<=0;
+  h+='<div style="background:var(--cell);border-radius:12px;padding:11px 14px;margin:4px 0 10px">'+
+   '<b>Fitness check:</b> VDOT '+S.fit.current+' → projects a <b style="color:'+
+   (onTrack?'var(--good)':'var(--tempo)')+'">'+S.fit.marathon+'</b> marathon '+
+   (onTrack?'— ahead of sub-3:25':'— '+Math.round(Math.abs(gap)/60)+' min off sub-3:25 (training-run floor; races read faster)')+
+   '<div style="color:var(--faint);font-size:11.5px;margin-top:3px">Estimated from your training runs via Daniels VDOT — the trend matters more than the number.</div></div>';
+ }
  let lastWk=null;
  runs.forEach(r=>{
   const wk=Math.floor((parse(r.date)-parse(S.plan.start))/DAY/7)+1;
@@ -991,9 +1078,11 @@ function renderBrief(today){
   h+='<div class="ready" style="color:var(--tempo)">Heat: feels like '+
    (S.weather.feelsF||S.weather.tempF)+'° — add 15–20s/mi to targets and hydrate; effort over pace today.</div>';
  }
+ const needsLog=bigRun&&!((S.ann||{})[String(bigRun.activityId)]||{}).rpe;
  h+='<div class="cta">'+
   (item?'<button onclick="openDetail('+item.scheduleId+')">Details</button>':'')+
-  (bigRun?'<button onclick="openRun(\''+bigRun.activityId+'\',\''+(item?item.title:'')+'\')">View run ▸</button>':'')+
+  (bigRun?'<button '+(needsLog?'class="primary" ':'')+'onclick="openRun(\''+bigRun.activityId+'\',\''+(item?item.title:'')+'\')">'+
+    (needsLog?'Log how it felt ▸':'View run ▸')+'</button>':'')+
   '</div>';
  br.innerHTML=h;br.style.display='block';
  const todayItem=S.schedule.filter(i=>i.date===today)[0];
@@ -1210,14 +1299,65 @@ function openDetail(sid){
   h+='<span style="color:var(--faint)">Not run yet.</span>';
  }
  const big=runsOn(it.date).filter(r=>r.activityId).sort((x,y)=>y.mi-x.mi)[0];
+ const missed=it.date<S.plan.today&&!big;
  h+='</div><div class="row">'+
   (big?'<button onclick="closeDetail();openRun(\''+big.activityId+'\',\''+it.title.replace(/'/g,'')+'\')">View run ▸</button>':'')+
+  (missed?'<button class="primary" onclick="openReplan('+it.scheduleId+')">Replan ▸</button>':'')+
   '<button onclick="enterMoveMode('+it.scheduleId+')">Move to another day…</button>'+
-  '<button class="primary" onclick="closeDetail()">Done</button></div>';
+  '<button '+(missed?'':'class="primary" ')+'onclick="closeDetail()">Done</button></div>';
  document.getElementById('dmodal').innerHTML=h;
  document.getElementById('dscrim').classList.add('show');
 }
 function closeDetail(){document.getElementById('dscrim').classList.remove('show');}
+
+/* ---------------- missed-workout replanning ---------------- */
+function openReplan(sid){
+ const it=S.schedule.find(i=>String(i.scheduleId)===String(sid));
+ if(!it)return;
+ const hard=isHard(it.title),today=S.plan.today;
+ let recDate=null;
+ if(hard){
+  const occupied=new Set(S.schedule.filter(x=>x.scheduleId!==it.scheduleId).map(x=>x.date));
+  const hardSet=new Set(S.schedule.filter(x=>x.scheduleId!==it.scheduleId&&isHard(x.title)).map(x=>x.date));
+  const near=d=>hardSet.has(d)||hardSet.has(fmt(new Date(parse(d).getTime()-DAY)))||
+               hardSet.has(fmt(new Date(parse(d).getTime()+DAY)));
+  const preferWE=/mi LR|MP Finish/.test(it.title);
+  for(let k=1;k<=10;k++){
+   const d=fmt(new Date(parse(today).getTime()+k*DAY)),dow=parse(d).getDay();
+   if(occupied.has(d)||near(d))continue;
+   if(preferWE&&k<=7&&dow!==6&&dow!==0)continue;
+   recDate=d;break;
+  }
+ }
+ const recLabel=recDate?parse(recDate).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'}):null;
+ let h='<h3>Replan: '+it.title.replace(/^W\d+ \w+ /,'')+'</h3>'+
+  '<p>Missed on '+parse(it.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'.</p>'+
+  '<div class="preview" style="margin-top:0">'+
+  (hard?
+   (recDate?'This is a key session — worth keeping. <b>'+recLabel+'</b> is the first clean day '+
+    '(no hard days adjacent, nothing displaced).':
+    'This is a key session but the next 10 days are full — absorbing it is cleaner than cramming.'):
+   'Easy miles are volume filler — absorbing a missed one is what a coach would tell you. '+
+   'Don’t chase it; the plan’s intact.')+
+  '</div><div class="row">'+
+  '<button onclick="closeDetail()">Cancel</button>'+
+  (recDate?'<button onclick="applyReplan('+sid+',\'skip\',null)">Skip it</button>'+
+   '<button class="primary" onclick="applyReplan('+sid+',\'move\',\''+recDate+'\')">Move to '+recLabel+'</button>':
+   '<button class="primary" onclick="applyReplan('+sid+',\'skip\',null)">Absorb it</button>')+
+  '</div>';
+ document.getElementById('dmodal').innerHTML=h;
+ document.getElementById('dscrim').classList.add('show');
+}
+async function applyReplan(sid,act,dateStr){
+ const it=S.schedule.find(i=>String(i.scheduleId)===String(sid));
+ closeDetail();
+ try{
+  if(act==='move')await jpost('/api/move',{scheduleId:it.scheduleId,workoutId:it.workoutId,date:dateStr});
+  else await jpost('/api/unschedule',{scheduleId:it.scheduleId});
+  toast(act==='move'?'Rescheduled — sync your watch':'Absorbed. Eyes forward.');
+  load(true);
+ }catch(e){toast('Replan failed: '+e.message,{err:1});}
+}
 
 /* ---------------- run detail sheet ---------------- */
 const fmtDur=s=>{const h=Math.floor(s/3600),m=Math.floor(s/60)-h*60,x=s-h*3600-m*60;
@@ -1440,16 +1580,22 @@ load(false);
 # ------------------------------------------------------------------ notify
 
 def cmd_notify():
-    """One-shot macOS notification with today's workout + readiness.
-    Schedule it (cron / Shortcuts / launchd) for a daily nudge, e.g.:
-      crontab -e   →   0 7 * * * cd "<this folder>" && /usr/bin/python3 coach.py notify
-    """
+    """One-shot macOS notification: today's workout + readiness, plus an
+    annotation nudge if today's run isn't logged yet. Schedule it with
+    ./lan.sh notify-on (7:30am briefing + 6:30pm nudge)."""
     today = date.today().isoformat()
     items = [i for i in fetch_schedule() if i["date"] == today]
     if items:
         msg = "Today: " + " + ".join(i["title"] for i in items)
     else:
         msg = "Rest day — no workout scheduled. Recovery is training too."
+    try:
+        acts = fetch_actuals()
+        todays = [r for r in acts["runs"] if r["date"] == today and r.get("activityId")]
+        if todays and str(todays[0]["activityId"]) not in (acts.get("ann") or {}):
+            msg = "Run synced: %.1f mi. Log how it felt (RPE) in timely — that data is yours alone." % todays[0]["mi"]
+    except Exception:
+        pass
     try:
         w = fetch_wellness()
         d = (w.get("days") or [{}])[0]
@@ -1528,6 +1674,16 @@ def main():
                   % (ip, args.port, ACCESS_KEY))
             print("(the key keeps others on the network out — use the full link)")
             print("Tip: in Safari, Share → Add to Home Screen for an app-like icon.")
+    backup_dir = os.environ.get("TIMELY_BACKUP_DIR") or os.getcwd()
+
+    def _backup_loop():
+        while True:
+            try:
+                store.backup(backup_dir)
+            except Exception:
+                pass
+            time.sleep(86400)
+    threading.Thread(target=_backup_loop, daemon=True).start()
     if not args.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

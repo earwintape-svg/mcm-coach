@@ -12,3 +12,5 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+timely-backup.db
+timely.db*

@@ -142,6 +142,25 @@ SHIM = """const DEMO=%s;
     const d=new Date(i.date+'T12:00:00');d.setDate(d.getDate()+b.days);
     i.date=d.toISOString().slice(0,10);n++;}});resp={ok:true,moved:n};}
   else if(u.startsWith('/api/run/'))resp=demoRun(decodeURIComponent(u.split('/api/run/')[1]));
+  else if(u.startsWith('/api/fitness')){
+   let best=0;
+   D.actuals.runs.forEach(r=>{
+    if(!r.paceSec||r.mi<3)return;
+    const t=r.mi*r.paceSec/60,v=r.mi*1609.34/t;
+    const vo2=-4.6+0.182258*v+0.000104*v*v;
+    const pct=0.8+0.1894393*Math.exp(-0.012778*t)+0.2989558*Math.exp(-0.1932605*t);
+    best=Math.max(best,vo2/pct);
+   });
+   let lo=3600,hi=25200;
+   for(let i=0;i<60;i++){const mid=(lo+hi)/2,t=mid/60,v=42195/t;
+    const vo2=-4.6+0.182258*v+0.000104*v*v;
+    const pct=0.8+0.1894393*Math.exp(-0.012778*t)+0.2989558*Math.exp(-0.1932605*t);
+    if(vo2/pct>best)lo=mid;else hi=mid;}
+   const ms=Math.round((lo+hi)/2);
+   const hh=Math.floor(ms/3600),rem=ms-hh*3600,mm=Math.floor(rem/60),ss=rem-mm*60;
+   resp={current:Math.round(best*10)/10,weeks:[],
+    marathon:hh+':'+String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0'),
+    goalGap:ms-12300};}
   else if(u.startsWith('/api/data'))resp=D.data;
   else if(u.startsWith('/api/actuals'))resp=D.actuals;
   else if(u.startsWith('/api/wellness'))resp=D.wellness;
