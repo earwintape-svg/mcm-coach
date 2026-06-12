@@ -439,6 +439,13 @@ PAGE = r"""<!DOCTYPE html>
  .stat b{display:block;font-size:20px;letter-spacing:-.5px}
  .stat span{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
 
+ /* tab navigation — pills on desktop, fixed bottom bar on mobile */
+ .tabbar{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
+  border-radius:999px;padding:4px;width:fit-content;margin:0 0 16px;z-index:40}
+ .tab{display:flex;gap:7px;align-items:center;padding:8px 18px;border-radius:999px;
+  color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;user-select:none}
+ .tab .ic{font-size:15px}
+ .tab.active{background:var(--accent);color:#fff}
  .wstrip{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);
   border-radius:15px;padding:10px 6px 8px;margin-bottom:12px}
  .wd{flex:1;text-align:center;cursor:pointer;border-radius:10px;padding:4px 0}
@@ -550,7 +557,14 @@ PAGE = r"""<!DOCTYPE html>
  #toast.err{border-color:var(--hard)}
 
  @media (max-width:700px){
-  .wrap{padding:max(12px,env(safe-area-inset-top)) 10px 76px}
+  .wrap{padding:max(12px,env(safe-area-inset-top)) 10px 96px}
+  .tabbar{position:fixed;bottom:0;left:0;right:0;width:auto;margin:0;border-radius:0;
+   border:none;border-top:1px solid var(--line);background:rgba(14,17,22,.97);
+   -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+   padding:7px 0 calc(7px + env(safe-area-inset-bottom))}
+  .tab{flex:1;flex-direction:column;gap:2px;padding:2px 0;font-size:10px;border-radius:0}
+  .tab .ic{font-size:21px}
+  .tab.active{background:none;color:var(--accent)}
   .hero{gap:12px;margin-bottom:12px}
   .hero h1{font-size:21px}
   .hero .race{font-size:12px}
@@ -586,10 +600,20 @@ PAGE = r"""<!DOCTYPE html>
    </div>
  </div>
 
+ <nav class="tabbar">
+  <div class="tab active" data-v="today" onclick="setView('today')"><span class="ic">☀️</span>Today</div>
+  <div class="tab" data-v="plan" onclick="setView('plan')"><span class="ic">📅</span>Plan</div>
+  <div class="tab" data-v="acts" onclick="setView('acts')"><span class="ic">📈</span>Activities</div>
+ </nav>
+
+ <div id="v-today">
  <div class="wstrip" id="wstrip"></div>
  <div class="banner" id="banner"></div>
  <div class="brief" id="brief" style="display:none"></div>
+ <div class="panel" id="weekpanel" style="display:none"></div>
+ </div>
 
+ <div id="v-plan" style="display:none">
  <div class="bar">
    <div class="mnav">
      <button class="ghost" onclick="nav(-1)">‹</button>
@@ -613,10 +637,13 @@ PAGE = r"""<!DOCTYPE html>
    <div class="grid" id="grid"><div class="skel"><i></i>Loading your calendar from Garmin…</div></div>
  </div>
 
- <div class="panel" id="weekpanel" style="display:none"></div>
-
  <div class="panel"><h3>Weekly mileage — planned vs run</h3>
    <div id="chart"></div><div class="rampnote" id="rampnote"></div></div>
+ </div>
+
+ <div id="v-acts" style="display:none">
+ <div class="panel" id="actpanel"><h3>Activities</h3></div>
+ </div>
 
  <div class="scrim" id="scrim">
   <div class="modal">
@@ -695,6 +722,15 @@ async function load(force){
 }
 function nav(d){S.month+=d;render();}
 
+function setView(v){
+ S.view=v;
+ const m={today:'v-today',plan:'v-plan',acts:'v-acts'};
+ Object.keys(m).forEach(k=>document.getElementById(m[k]).style.display=k===v?'':'none');
+ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.v===v));
+ try{localStorage.setItem('coachView',v);}catch(e){}
+ window.scrollTo(0,0);
+}
+
 /* ---------------- readiness ---------------- */
 function readiness(){
  const w=S.wellness;
@@ -723,6 +759,44 @@ function render(){
  renderWeek(today);
  renderChart();
  renderRamp(wk);
+ renderActs();
+}
+
+function renderActs(){
+ const el=document.getElementById('actpanel');
+ const runs=S.runs.slice().sort((a,b)=>b.date.localeCompare(a.date));
+ if(!runs.length){
+  el.innerHTML='<h3>Activities</h3><p style="color:var(--dim)">Completed runs land here automatically once training starts — tap any for the full breakdown.</p>';
+  return;
+ }
+ const tot=runs.reduce((a,r)=>a+r.mi,0);
+ let h='<h3>Activities <span style="color:var(--dim);font-weight:400">— '+
+   runs.length+' runs · '+tot.toFixed(0)+' mi</span></h3>';
+ let lastWk=null;
+ runs.forEach(r=>{
+  const wk=Math.floor((parse(r.date)-parse(S.plan.start))/DAY/7)+1;
+  if(wk!==lastWk){
+   h+='<div style="color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin:14px 0 2px">Week '+wk+
+    (S.weeklyActual[wk]?' · '+S.weeklyActual[wk]+' of '+(S.plan.plannedWeekly[wk]||'?')+' mi':'')+'</div>';
+   lastWk=wk;
+  }
+  const it=S.schedule.find(i=>i.date===r.date);
+  const title=(it?it.title:r.name).replace(/^W\d+ \w+ /,'');
+  const a=it?assess(it):null;
+  const col=a?(a.distOk&&a.paceOk!==false?'var(--good)':'var(--tempo)'):'var(--dim)';
+  h+='<div onclick="openRun(\''+r.activityId+'\',\''+(it?it.title:'')+'\')"'+
+   ' style="display:flex;gap:11px;align-items:center;padding:10px 0;border-top:1px solid var(--line);cursor:pointer">'+
+   '<div style="width:9px;height:9px;border-radius:5px;flex:none;background:var(--'+
+     (it?kindVar[kind(it.title)]:'easy')+')"></div>'+
+   '<div style="flex:1;min-width:0"><b>'+title+'</b>'+
+   '<div style="color:var(--dim);font-size:12px">'+
+     parse(r.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'</div></div>'+
+   '<div style="text-align:right"><b>'+r.mi.toFixed(1)+' mi</b>'+
+   '<div style="color:'+col+';font-size:12px">'+(r.pace?r.pace+'/mi':'')+
+     (a&&a.paceMsg?' · '+a.paceMsg:'')+'</div></div>'+
+   '<span style="color:var(--faint)">›</span></div>';
+ });
+ el.innerHTML=h;
 }
 
 function renderStrip(today){
@@ -1139,6 +1213,7 @@ async function doVacation(){
  }catch(e){toast('Shift failed: '+e.message,{err:1});}
 }
 
+try{setView(localStorage.getItem('coachView')||'today');}catch(e){setView('today');}
 load(false);
 </script></div></body></html>
 """
