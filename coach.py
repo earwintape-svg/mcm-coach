@@ -25,6 +25,7 @@ are someone else's business model.
 Python 3.9 stdlib only. `upload --force` resets dates to plan.py.
 """
 import json
+import secrets
 import socket
 import subprocess
 import sys
@@ -96,6 +97,7 @@ def fetch_actuals():
         dur = a.get("movingDuration") or a.get("duration") or 0.0
         pace_sec = int(dur / mi) if mi > 0.1 and dur else None
         runs.append({
+            "activityId": a.get("activityId"),
             "date": day,
             "mi": round(mi, 2),
             "paceSec": pace_sec,
@@ -142,6 +144,70 @@ def fetch_wellness(force=False):
     except Exception as e:
         out["error"] = str(e)
     _cache.update(well=out, well_ts=time.time())
+    return out
+
+
+def fetch_run_detail(activity_id):
+    """One run's full story: summary stats, laps, downsampled pace/HR/elev
+    series, and the GPS trace (rendered as an abstract route — no map tiles,
+    no third-party requests, no home-location leak)."""
+    c = client()
+    summ = api(c, "/activity-service/activity/%s" % activity_id) or {}
+    s = summ.get("summaryDTO") or {}
+    dist = s.get("distance") or 0.0
+    dur = s.get("movingDuration") or s.get("duration") or 0.0
+    mi = dist / MILE
+    out = {"summary": {
+        "name": summ.get("activityName") or "Run",
+        "mi": round(mi, 2),
+        "durSec": int(dur),
+        "paceSec": int(dur / mi) if mi > 0.1 else None,
+        "avgHr": s.get("averageHR"),
+        "maxHr": s.get("maxHR"),
+        "cad": s.get("averageRunCadence"),
+        "elevFt": int(round((s.get("elevationGain") or 0) * 3.28084)),
+    }, "laps": [], "series": {}, "route": []}
+    try:
+        spl = api(c, "/activity-service/activity/%s/splits" % activity_id) or {}
+        for l in spl.get("lapDTOs") or []:
+            ld = l.get("distance") or 0
+            lt = l.get("movingDuration") or l.get("duration") or 0
+            if ld > 30 and lt:
+                out["laps"].append({"mi": round(ld / MILE, 2),
+                                    "paceSec": int(lt / (ld / MILE))})
+    except Exception:
+        pass
+    try:
+        det = api(c, "/activity-service/activity/%s/details"
+                     "?maxChartSize=300&maxPolylineSize=300" % activity_id) or {}
+        idx = {}
+        for i, m in enumerate(det.get("metricDescriptors") or []):
+            idx[m.get("key")] = m.get("metricsIndex", i)
+        pts = det.get("activityDetailMetrics") or []
+
+        def col(key):
+            i = idx.get(key)
+            if i is None:
+                return None
+            return [(p.get("metrics") or [])[i] if i < len(p.get("metrics") or []) else None
+                    for p in pts]
+        dist_m, spd = col("sumDistance"), col("directSpeed")
+        hr, elev = col("directHeartRate"), col("directElevation")
+        lat, lon = col("directLatitude"), col("directLongitude")
+        d_arr, p_arr, h_arr, rt = [], [], [], []
+        for i in range(len(pts)):
+            if not dist_m or dist_m[i] is None:
+                continue
+            d_arr.append(round(dist_m[i] / MILE, 3))
+            v = spd[i] if spd else None
+            p_arr.append(int(MILE / v) if v and v > 0.5 else None)
+            h_arr.append(hr[i] if hr else None)
+            if lat and lon and lat[i] is not None and lon[i] is not None:
+                rt.append([round(lat[i], 5), round(lon[i], 5)])
+        out["series"] = {"d": d_arr, "pace": p_arr, "hr": h_arr}
+        out["route"] = rt
+    except Exception:
+        pass
     return out
 
 
@@ -220,7 +286,16 @@ def plan_summary():
 
 # ------------------------------------------------------------------- HTTP
 
+ACCESS_KEY = None  # set in --lan mode; localhost is always allowed
+
+
 class Handler(BaseHTTPRequestHandler):
+
+    def _authorized(self):
+        if ACCESS_KEY is None or self.client_address[0] in ("127.0.0.1", "::1"):
+            return True
+        return (self.headers.get("X-Key") == ACCESS_KEY
+                or ("key=" + ACCESS_KEY) in self.path)
 
     def _json(self, obj, code=200):
         body = json.dumps(obj).encode()
@@ -232,6 +307,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            if not self._authorized():
+                return self._json({"error": "unauthorized — use the link with ?key=… printed in Terminal"}, 403)
             if self.path == "/" or self.path.startswith("/index"):
                 body = PAGE.encode()
                 self.send_response(200)
@@ -246,6 +323,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(fetch_actuals())
             elif self.path.startswith("/api/wellness"):
                 self._json(fetch_wellness("refresh=1" in self.path))
+            elif self.path.startswith("/api/run/"):
+                aid = self.path.split("/api/run/")[1].split("?")[0]
+                self._json(fetch_run_detail(aid))
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as e:
@@ -253,6 +333,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if not self._authorized():
+                return self._json({"error": "unauthorized"}, 403)
             n = int(self.headers.get("Content-Length") or 0)
             req = json.loads(self.rfile.read(n) or b"{}")
             if self.path == "/api/move":
@@ -370,6 +452,21 @@ PAGE = r"""<!DOCTYPE html>
  .modal .preview{background:var(--cell);border-radius:10px;padding:10px 12px;margin-top:12px;
   font-size:13px;color:var(--dim);max-height:150px;overflow:auto;line-height:1.6}
  .modal .row{display:flex;gap:9px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+ /* run sheet */
+ .runsheet{width:560px}
+ .runsheet h4{margin:16px 0 6px;font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.7px}
+ .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:12px 0 2px}
+ .statgrid div{background:var(--cell);border-radius:10px;padding:9px 11px}
+ .statgrid b{display:block;font-size:17px;letter-spacing:-.3px}
+ .statgrid span{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+ .lapbars{display:flex;align-items:flex-end;gap:3px;height:110px;margin:6px 0 2px;position:relative}
+ .lapbars .b{flex:1;background:var(--good);border-radius:3px 3px 0 0;min-width:3px;opacity:.92;position:relative;z-index:1}
+ .lapbars .tband{position:absolute;left:0;right:0;background:rgba(255,255,255,.14);border-radius:3px;z-index:0}
+ .splitrow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px}
+ .splitrow .n{width:34px;color:var(--dim);flex:none;text-align:right}
+ .splitrow .bar{height:23px;border-radius:6px;background:var(--strides);color:#06221f;font-weight:600;
+  display:flex;align-items:center;padding:0 8px;font-size:12px;white-space:nowrap}
+ .splitrow .pm{width:52px;text-align:right;font-size:12px}
  #toast{position:fixed;bottom:max(20px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
   background:#222b36;border:1px solid var(--line);color:var(--tx);border-radius:12px;
   padding:11px 16px;display:none;align-items:center;gap:13px;z-index:60;
@@ -449,6 +546,10 @@ PAGE = r"""<!DOCTYPE html>
   <div class="modal" id="dmodal"></div>
  </div>
 
+ <div class="scrim" id="rscrim" onclick="if(event.target===this)closeRun()">
+  <div class="modal runsheet" id="rmodal"></div>
+ </div>
+
  <div id="toast"></div>
 
 <script>
@@ -479,9 +580,10 @@ function toast(msg,opts){
  if(!opts.sticky)t._h=setTimeout(()=>t.style.display='none',opts.undo?6000:3000);
 }
 function hideToast(){document.getElementById('toast').style.display='none';}
-async function jget(u){const r=await fetch(u);const j=await r.json();
+const KEY=new URLSearchParams(location.search).get('key')||'';
+async function jget(u){const r=await fetch(u,{headers:{'X-Key':KEY}});const j=await r.json();
  if(j.error)throw new Error(j.error);return j;}
-async function jpost(u,b){const r=await fetch(u,{method:'POST',body:JSON.stringify(b)});
+async function jpost(u,b){const r=await fetch(u,{method:'POST',headers:{'X-Key':KEY},body:JSON.stringify(b)});
  const j=await r.json();if(j.error)throw new Error(j.error);return j;}
 
 async function load(force){
@@ -576,7 +678,7 @@ function renderGrid(today){
    ' data-date="'+ds+'" onclick="cellTap(event)"'+
    ' ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">'+
    '<div class="dnum"><b>'+d.getDate()+'</b>'+
-   (ranByDate[ds]?'<span class="ran" title="'+ranTip[ds]+'">✓ '+ranByDate[ds].toFixed(1)+'</span>':'')+'</div>';
+   (ranByDate[ds]?'<span class="ran" onclick="ranTap(event,\''+ds+'\')" style="cursor:pointer" title="'+ranTip[ds]+' — tap for run details">✓ '+ranByDate[ds].toFixed(1)+'</span>':'')+'</div>';
   (byDate[ds]||[]).forEach(it=>{
    const prev=fmt(new Date(d.getTime()-DAY)),nxt=fmt(new Date(d.getTime()+DAY));
    const clash=isHard(it.title)&&(hardDates.has(prev)||hardDates.has(nxt));
@@ -754,13 +856,119 @@ function openDetail(sid){
  }else{
   h+='<span style="color:var(--faint)">Not run yet.</span>';
  }
+ const big=runsOn(it.date).filter(r=>r.activityId).sort((x,y)=>y.mi-x.mi)[0];
  h+='</div><div class="row">'+
+  (big?'<button onclick="closeDetail();openRun(\''+big.activityId+'\',\''+it.title.replace(/'/g,'')+'\')">View run ▸</button>':'')+
   '<button onclick="enterMoveMode('+it.scheduleId+')">Move to another day…</button>'+
   '<button class="primary" onclick="closeDetail()">Done</button></div>';
  document.getElementById('dmodal').innerHTML=h;
  document.getElementById('dscrim').classList.add('show');
 }
 function closeDetail(){document.getElementById('dscrim').classList.remove('show');}
+
+/* ---------------- run detail sheet ---------------- */
+const fmtDur=s=>{const h=Math.floor(s/3600),m=Math.floor(s/60)-h*60,x=s-h*3600-m*60;
+ return (h?h+':':'')+String(m).padStart(h?2:1,'0')+':'+String(x).padStart(2,'0');};
+function ranTap(e,ds){
+ e.stopPropagation();
+ if(S.moveItem)return;
+ const rs=runsOn(ds).filter(r=>r.activityId).sort((a,b)=>b.mi-a.mi);
+ if(!rs.length)return;
+ const it=S.schedule.find(i=>i.date===ds);
+ openRun(rs[0].activityId,it?it.title:null);
+}
+async function openRun(aid,title){
+ const m=document.getElementById('rmodal');
+ m.innerHTML='<div class="skel" style="padding:60px 20px"><i></i>Loading run from Garmin…</div>';
+ document.getElementById('rscrim').classList.add('show');
+ let j;
+ try{j=await jget('/api/run/'+aid);}
+ catch(e){m.innerHTML='<h3>Couldn’t load run</h3><p>'+e.message+
+  '</p><div class="row"><button onclick="closeRun()">Close</button></div>';return;}
+ renderRun(j,title?S.plan.planTargets[title]:null,title);
+}
+function closeRun(){document.getElementById('rscrim').classList.remove('show');}
+
+function routeSvg(rt){
+ if(!rt||rt.length<8)return'';
+ const lats=rt.map(p=>p[0]),lons=rt.map(p=>p[1]);
+ const la0=Math.min(...lats),la1=Math.max(...lats),lo0=Math.min(...lons),lo1=Math.max(...lons);
+ const W=520,H=180,pad=12;
+ const kx=Math.cos((la0+la1)/2*Math.PI/180);   // shrink longitude at latitude
+ const spanX=(lo1-lo0)*kx||1e-9, spanY=(la1-la0)||1e-9;
+ const sc=Math.min((W-2*pad)/spanX,(H-2*pad)/spanY);
+ const ox=(W-spanX*sc)/2, oy=(H-spanY*sc)/2;
+ const pt=p=>[(ox+((p[1]-lo0)*kx)*sc).toFixed(1),(oy+(la1-p[0])*sc).toFixed(1)];
+ let dStr='M'+pt(rt[0]).join(' ');
+ for(let i=1;i<rt.length;i++)dStr+=' L'+pt(rt[i]).join(' ');
+ const a=pt(rt[0]),b=pt(rt[rt.length-1]);
+ return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;background:var(--cell);border-radius:12px">'+
+  '<path d="'+dStr+'" fill="none" stroke="var(--strides)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity=".95"/>'+
+  '<circle cx="'+a[0]+'" cy="'+a[1]+'" r="5" fill="var(--good)"/>'+
+  '<circle cx="'+b[0]+'" cy="'+b[1]+'" r="5" fill="#fff"/></svg>';
+}
+
+function lineSvg(d,vals,color,invert){
+ const pts=[];
+ for(let i=0;i<d.length;i++)if(vals[i]!=null)pts.push([d[i],vals[i]]);
+ if(pts.length<5)return'';
+ const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+ const x1=Math.max(...xs),v0=Math.min(...ys),v1=Math.max(...ys);
+ const W=520,H=90,sp=(v1-v0)||1;
+ const path=pts.map((p,i)=>{
+  const x=(p[0]/x1)*W;
+  let y=(p[1]-v0)/sp; if(invert)y=1-y;
+  return (i?'L':'M')+x.toFixed(1)+' '+(H-8-y*(H-16)).toFixed(1);
+ }).join(' ');
+ return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;background:var(--cell);border-radius:10px">'+
+  '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2"/></svg>';
+}
+
+function renderRun(j,target,title){
+ const s=j.summary||{},laps=j.laps||[],ser=j.series||{};
+ let h='<h3>'+(title||s.name)+'</h3><p>'+s.name+'</p>';
+ h+=routeSvg(j.route);
+ h+='<div class="statgrid">'+
+  '<div><b>'+(s.mi!=null?s.mi.toFixed(2):'—')+'</b><span>miles</span></div>'+
+  '<div><b>'+(s.durSec?fmtDur(s.durSec):'—')+'</b><span>time</span></div>'+
+  '<div><b>'+(s.paceSec?fmtPace(s.paceSec):'—')+'</b><span>avg /mi</span></div>'+
+  '<div><b>'+(s.avgHr||'—')+'</b><span>avg hr</span></div>'+
+  '<div><b>'+(s.cad?Math.round(s.cad)+'':'—')+'</b><span>cadence</span></div>'+
+  '<div><b>'+(s.elevFt!=null?s.elevFt+'′':'—')+'</b><span>elev gain</span></div></div>';
+ if(laps.length>1){
+  // laps vs target: bar height ∝ speed, white band = target pace range
+  const v=laps.map(l=>1/l.paceSec);
+  let vmin=Math.min(...v),vmax=Math.max(...v);
+  if(target){vmin=Math.min(vmin,1/target.slowSec);vmax=Math.max(vmax,1/target.fastSec);}
+  const lo=vmin*0.93,span=(vmax*1.03-lo)||1e-9;
+  const hpc=x=>Math.round((1/x-lo)/span*100);
+  h+='<h4>Laps'+(target?' vs target ('+target.label+')':'')+'</h4><div class="lapbars">';
+  if(target){
+   const top=hpc(target.fastSec),bot=hpc(target.slowSec);
+   h+='<div class="tband" style="bottom:'+bot+'%;height:'+Math.max(3,top-bot)+'%"></div>';
+  }
+  laps.forEach(l=>{h+='<div class="b" style="height:'+Math.max(4,hpc(l.paceSec))+'%" title="'+
+    l.mi.toFixed(2)+' mi @ '+fmtPace(l.paceSec)+'/mi"></div>';});
+  h+='</div>';
+  h+='<h4>Splits</h4>';
+  const fastest=Math.min(...laps.map(l=>l.paceSec));
+  laps.forEach((l,i)=>{
+   const w=35+55*(fastest/l.paceSec);
+   let pm='';
+   if(i>0){const dlt=laps[i-1].paceSec-l.paceSec;
+    pm='<span class="pm" style="color:'+(dlt>=0?'var(--good)':'var(--hard)')+'">'+
+     (dlt>=0?'+':'−')+fmtPace(Math.abs(dlt))+'</span>';}
+   h+='<div class="splitrow"><span class="n">'+(l.mi>=0.95&&l.mi<=1.05?(i+1):l.mi.toFixed(2))+
+    '</span><div class="bar" style="width:'+w.toFixed(0)+'%">'+fmtPace(l.paceSec)+'/mi</div>'+pm+'</div>';
+  });
+ }
+ if(ser.d&&ser.d.length){
+  if(ser.pace&&ser.pace.some(x=>x!=null)){h+='<h4>Pace</h4>'+lineSvg(ser.d,ser.pace,'#3ec6c0',true);}
+  if(ser.hr&&ser.hr.some(x=>x!=null)){h+='<h4>Heart rate</h4>'+lineSvg(ser.d,ser.hr,'#ff6b6b',false);}
+ }
+ h+='<div class="row"><button class="primary" onclick="closeRun()">Done</button></div>';
+ document.getElementById('rmodal').innerHTML=h;
+}
 
 /* ---------------- vacation mode ---------------- */
 function openVacation(){
@@ -846,6 +1054,7 @@ def lan_ip():
 
 
 def main():
+    global ACCESS_KEY
     if "notify" in sys.argv[1:]:
         cmd_notify()
         return
@@ -855,9 +1064,11 @@ def main():
     url = "http://127.0.0.1:%d" % PORT
     print("Coach dashboard: %s  (Ctrl+C to stop)" % url)
     if lan:
+        ACCESS_KEY = secrets.token_urlsafe(6)
         ip = lan_ip()
         if ip:
-            print("On your phone (same Wi-Fi): http://%s:%d" % (ip, PORT))
+            print("On your phone (same Wi-Fi): http://%s:%d/?key=%s" % (ip, PORT, ACCESS_KEY))
+            print("(the key keeps others on the network out — use the full link)")
             print("Tip: in Safari, Share → Add to Home Screen for an app-like icon.")
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

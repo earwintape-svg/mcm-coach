@@ -48,7 +48,8 @@ def build_demo_data():
                 pace = target["slowSec"] + 28
         else:
             pace = random.randint(585, 615)       # easy ~9:45-10:15
-        runs.append({"date": s["date"], "mi": mi, "paceSec": pace,
+        runs.append({"activityId": s["date"], "date": s["date"], "mi": mi,
+                     "paceSec": pace,
                      "pace": "%d:%02d" % (pace // 60, pace % 60),
                      "name": s["title"]})
         wk = int(s["title"].split(" ")[0][1:])
@@ -72,6 +73,57 @@ def build_demo_data():
 SHIM = """const DEMO=%s;
 (function(){
  const D=DEMO;
+ function mulberry(seed){return function(){seed|=0;seed=(seed+0x6D2B79F5)|0;
+  let t=Math.imul(seed^(seed>>>15),1|seed);t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296;};}
+ window.demoRun=function(aid){
+  const r=D.actuals.runs.find(x=>x.activityId===aid);
+  if(!r)return {error:'not found'};
+  const it=D.data.schedule.find(i=>i.date===r.date);
+  const title=it?it.title:'';
+  const target=title?D.data.plan.planTargets[title]:null;
+  const rnd=mulberry(r.date.split('-').join('')*1);
+  // laps: workout structure for interval days, mile splits otherwise
+  const laps=[];
+  const rep=title.match(/(\\d+)x ?(\\d+|Mile|Cat|Harlem)/);
+  if(target&&rep){
+   const n=Math.min(10,parseInt(rep[1],10));
+   const raw=parseInt(rep[2],10);
+   const repMi=rep[2]==='Mile'?1:(raw>30?raw/1609.34:(rep[2]==='Harlem'?0.4:0.2));
+   laps.push({mi:1.5,paceSec:600+Math.round(rnd()*30)});
+   for(let i=0;i<n;i++){
+    laps.push({mi:repMi,paceSec:Math.round((target.fastSec+target.slowSec)/2+(rnd()-0.5)*16)});
+    laps.push({mi:0.25,paceSec:660+Math.round(rnd()*40)});
+   }
+   laps.push({mi:1.5,paceSec:610+Math.round(rnd()*25)});
+  }else{
+   const n=Math.max(1,Math.round(r.mi));
+   for(let i=0;i<n;i++){
+    let p=r.paceSec+(rnd()-0.5)*20;
+    if(target&&i===0)p=r.paceSec+55;          // warmup mile
+    if(target&&i===n-1)p=r.paceSec-12;        // strong finish
+    laps.push({mi:i===n-1?(r.mi-(n-1))||1:1,paceSec:Math.round(p)});
+   }
+  }
+  // series + abstract riverside route
+  const N=150,d=[],pc=[],hr=[],rt=[];
+  let cum=0;const tot=laps.reduce((a,l)=>a+l.mi,0);
+  for(let i=0;i<N;i++){
+   const x=i/(N-1)*tot;d.push(Math.round(x*1000)/1000);
+   let acc=0,lp=laps[laps.length-1];
+   for(const l of laps){acc+=l.mi;if(x<=acc){lp=l;break;}}
+   pc.push(Math.round(lp.paceSec+Math.sin(i*1.7)*9+(rnd()-0.5)*8));
+   hr.push(Math.round(Math.min(184,128+x/tot*22+ (620-lp.paceSec)*0.12+Math.sin(i*0.9)*3)));
+   const t=i/(N-1);
+   rt.push([40.72+t*0.028+Math.sin(t*9)*0.0012,
+            -74.012+Math.sin(t*3.1)*0.004+Math.cos(t*13)*0.0009]);
+  }
+  return {summary:{name:title?title+' — demo run':'Demo run',mi:r.mi,
+    durSec:Math.round(r.mi*r.paceSec),paceSec:r.paceSec,
+    avgHr:Math.round(hr.reduce((a,b)=>a+b,0)/hr.length),
+    maxHr:Math.max.apply(null,hr),cad:157,elevFt:48},
+   laps:laps,series:{d:d,pace:pc,hr:hr},route:rt};
+ };
  window.fetch=async function(u,opts){
   let resp;u=String(u);
   if(u.startsWith('/api/move')){const b=JSON.parse(opts.body);
@@ -81,6 +133,7 @@ SHIM = """const DEMO=%s;
    D.data.schedule.forEach(i=>{if(i.date>=b.from&&i.date<=b.to){
     const d=new Date(i.date+'T12:00:00');d.setDate(d.getDate()+b.days);
     i.date=d.toISOString().slice(0,10);n++;}});resp={ok:true,moved:n};}
+  else if(u.startsWith('/api/run/'))resp=demoRun(decodeURIComponent(u.split('/api/run/')[1]));
   else if(u.startsWith('/api/data'))resp=D.data;
   else if(u.startsWith('/api/actuals'))resp=D.actuals;
   else if(u.startsWith('/api/wellness'))resp=D.wellness;
