@@ -129,6 +129,9 @@ SHIM = """const DEMO=%s;
   if(u.startsWith('/api/move')){const b=JSON.parse(opts.body);
    const it=D.data.schedule.find(i=>String(i.scheduleId)===String(b.scheduleId));
    if(it)it.date=b.date;resp={ok:true};}
+  else if(u.startsWith('/api/unschedule')){const b=JSON.parse(opts.body);
+   const i=D.data.schedule.findIndex(x=>String(x.scheduleId)===String(b.scheduleId));
+   if(i>=0)D.data.schedule.splice(i,1);resp={ok:true};}
   else if(u.startsWith('/api/shift_range')){const b=JSON.parse(opts.body);let n=0;
    D.data.schedule.forEach(i=>{if(i.date>=b.from&&i.date<=b.to){
     const d=new Date(i.date+'T12:00:00');d.setDate(d.getDate()+b.days);
@@ -156,7 +159,7 @@ SHIM = """const DEMO=%s;
 def main():
     data = build_demo_data()
     shim = "<script>" + SHIM % json.dumps(data) + "</script>\n"
-    marker = "<script>\nlet S="
+    marker = "<script>\nconst IS_MOBILE"
     assert marker in coach.PAGE, "coach.PAGE layout changed; update make_demo.py"
     html = coach.PAGE.replace(marker, shim + marker)
     html = html.replace("<title>MCM Coach</title>",

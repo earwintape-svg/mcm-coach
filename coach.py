@@ -254,6 +254,13 @@ def move_workout(schedule_id, workout_id, new_date):
     _cache["sched"] = None
 
 
+def unschedule_workout(schedule_id):
+    """Remove a workout from the calendar (the workout itself stays in the
+    library). Used by vacation mode's 'skip' recommendations."""
+    api(client(), "/workout-service/schedule/%d" % schedule_id, method="DELETE")
+    _cache["sched"] = None
+
+
 def shift_range(date_from, date_to, days):
     d1, d2 = date.fromisoformat(date_from), date.fromisoformat(date_to)
     moved = 0
@@ -400,6 +407,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": "shift limited to ±90 days"}, 400)
                 moved = shift_range(str(req["from"]), str(req["to"]), days)
                 self._json({"ok": True, "moved": moved})
+            elif self.path == "/api/unschedule":
+                unschedule_workout(int(req["scheduleId"]))
+                self._json({"ok": True})
             else:
                 self._json({"error": "not found"}, 404)
         except (KeyError, ValueError) as e:
@@ -412,7 +422,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 PAGE = r"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>MCM Coach</title>
+<html><head><meta charset="utf-8"><title>timely — run on time</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101418'/%3E%3Cpath d='M20 20 L33 32 L20 44' fill='none' stroke='%235DCAA5' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 24 L46 32 L36 40' fill='none' stroke='%23F0997B' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -422,7 +433,8 @@ PAGE = r"""<!DOCTYPE html>
   --bg:#0e1116; --panel:#161b22; --cell:#11151b; --line:#232a33;
   --tx:#f0f3f6; --dim:#93a0ad; --faint:#5b6671;
   --easy:#34c77b; --strides:#3ec6c0; --long:#5aa2ff; --tempo:#f5a623;
-  --hard:#ff6b6b; --accent:#5aa2ff; --good:#34c77b;
+  --hard:#ff6b6b; --accent:#5DCAA5; --accent2:#F0997B; --good:#34c77b;
+  --oninvert:#06231b;
  }
  *{box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
  body{margin:0;background:var(--bg);color:var(--tx);
@@ -444,8 +456,10 @@ PAGE = r"""<!DOCTYPE html>
   border-radius:999px;padding:4px;width:fit-content;margin:0 0 16px;z-index:40}
  .tab{display:flex;gap:7px;align-items:center;padding:8px 18px;border-radius:999px;
   color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;user-select:none}
- .tab .ic{font-size:15px}
- .tab.active{background:var(--accent);color:#fff}
+ .tab svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round}
+ .tab.active{background:var(--accent);color:var(--oninvert)}
+ .wd.sel{background:#1b222b;box-shadow:inset 0 0 0 1.5px var(--accent)}
  .wstrip{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);
   border-radius:15px;padding:10px 6px 8px;margin-bottom:12px}
  .wd{flex:1;text-align:center;cursor:pointer;border-radius:10px;padding:4px 0}
@@ -482,7 +496,10 @@ PAGE = r"""<!DOCTYPE html>
  button{background:var(--panel);color:var(--tx);border:1px solid var(--line);
   border-radius:9px;padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit}
  button:hover{border-color:var(--accent)}
- button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+ button.primary{background:var(--accent);border-color:var(--accent);color:var(--oninvert);font-weight:600}
+ .seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px}
+ .seg button{border:none;background:none;padding:6px 14px;border-radius:8px;color:var(--dim);font-weight:600}
+ .seg button.on{background:var(--accent);color:var(--oninvert)}
  button.ghost{border:none;background:none;color:var(--accent);font-weight:600;padding:8px 9px}
  .legend{margin-left:auto;display:flex;gap:11px;color:var(--dim);font-size:11.5px;flex-wrap:wrap}
  .legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px}
@@ -562,15 +579,15 @@ PAGE = r"""<!DOCTYPE html>
    border:none;border-top:1px solid var(--line);background:rgba(14,17,22,.97);
    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
    padding:7px 0 calc(7px + env(safe-area-inset-bottom))}
-  .tab{flex:1;flex-direction:column;gap:2px;padding:2px 0;font-size:10px;border-radius:0}
-  .tab .ic{font-size:21px}
+  .tab{flex:1;flex-direction:column;gap:3px;padding:2px 0;font-size:10px;border-radius:0}
+  .tab svg{width:22px;height:22px}
   .tab.active{background:none;color:var(--accent)}
   .hero{gap:12px;margin-bottom:12px}
   .hero h1{font-size:21px}
   .hero .race{font-size:12px}
   .stats{margin-left:0;width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .stat{min-width:0;padding:9px 6px}.stat b{font-size:19px}
-  .legend{display:none}
+  .legend{margin-left:0;width:100%;order:9}
   .bar{gap:7px}
   .bar button{padding:9px 12px}            /* >=44pt tap targets */
   .mnav b{min-width:104px}
@@ -591,8 +608,10 @@ PAGE = r"""<!DOCTYPE html>
 </style></head><body><div class="wrap">
 
  <div class="hero">
-   <div><h1>Marine Corps Marathon</h1>
-   <div class="race">Sun Oct 25, 2026 · goal sub-3:25 · 7:50/mi MP</div></div>
+   <div style="display:flex;align-items:center;gap:12px">
+   <svg width="42" height="42" viewBox="0 0 64 64" aria-label="timely logo"><rect width="64" height="64" rx="14" fill="#101418" stroke="#232a33"/><path d="M20 20 L33 32 L20 44" fill="none" stroke="#5DCAA5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 24 L46 32 L36 40" fill="none" stroke="#F0997B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+   <div><h1 style="letter-spacing:-.6px">timely</h1>
+   <div class="race">Run on time · MCM Oct 25, 2026 · sub-3:25</div></div></div>
    <div class="stats">
      <div class="stat"><b id="cdays">—</b><span>days to go</span></div>
      <div class="stat"><b id="wkmi">—</b><span>mi this week</span></div>
@@ -601,9 +620,12 @@ PAGE = r"""<!DOCTYPE html>
  </div>
 
  <nav class="tabbar">
-  <div class="tab active" data-v="today" onclick="setView('today')"><span class="ic">☀️</span>Today</div>
-  <div class="tab" data-v="plan" onclick="setView('plan')"><span class="ic">📅</span>Plan</div>
-  <div class="tab" data-v="acts" onclick="setView('acts')"><span class="ic">📈</span>Activities</div>
+  <div class="tab active" data-v="today" onclick="setView('today')">
+   <svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+  <div class="tab" data-v="plan" onclick="setView('plan')">
+   <svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+  <div class="tab" data-v="acts" onclick="setView('acts')">
+   <svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
  </nav>
 
  <div id="v-today">
@@ -615,13 +637,17 @@ PAGE = r"""<!DOCTYPE html>
 
  <div id="v-plan" style="display:none">
  <div class="bar">
-   <div class="mnav">
+   <div class="seg">
+     <button id="segList" onclick="setPlanMode('list')">List</button>
+     <button id="segMonth" onclick="setPlanMode('month')">Month</button>
+   </div>
+   <div class="mnav" id="mnav">
      <button class="ghost" onclick="nav(-1)">‹</button>
      <b id="mlabel"></b>
      <button class="ghost" onclick="nav(1)">›</button>
    </div>
-   <button onclick="openVacation()">✈️ Vacation</button>
-   <button onclick="load(true)">↻</button>
+   <button onclick="openVacation()">Vacation</button>
+   <button onclick="load(true)" aria-label="refresh">↻</button>
    <div class="legend">
      <span><i style="background:var(--easy)"></i>Easy</span>
      <span><i style="background:var(--strides)"></i>Strides</span>
@@ -631,11 +657,12 @@ PAGE = r"""<!DOCTYPE html>
    </div>
  </div>
 
- <div class="cal">
+ <div class="cal" id="calwrap">
    <div class="dow"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div>
      <div>Fri</div><div>Sat</div><div>Sun</div></div>
    <div class="grid" id="grid"><div class="skel"><i></i>Loading your calendar from Garmin…</div></div>
  </div>
+ <div class="panel" id="planlist" style="display:none;margin-top:0"></div>
 
  <div class="panel"><h3>Weekly mileage — planned vs run</h3>
    <div id="chart"></div><div class="rampnote" id="rampnote"></div></div>
@@ -648,16 +675,15 @@ PAGE = r"""<!DOCTYPE html>
  <div class="scrim" id="scrim">
   <div class="modal">
     <h3>Vacation mode</h3>
-    <p>Pick the days you'll be away. Every workout in that range moves by the
-       number of days you choose — preview first, nothing changes until you confirm.</p>
+    <p>Pick the days you'll be away. Timely plans around it: easy runs get
+       dropped (they're filler), key sessions get moved to clean days after
+       you're back — never stacking two hard days. Preview, then apply.</p>
     <label>Away from</label><input type="date" id="vfrom">
     <label>Until</label><input type="date" id="vto">
-    <label>Move those workouts by (days; 7 = one week later)</label>
-    <input type="number" id="vdays" value="7">
     <div class="preview" id="vpreview">Pick dates to preview.</div>
     <div class="row">
       <button onclick="closeVacation()">Cancel</button>
-      <button class="primary" id="vgo" onclick="doVacation()" disabled>Move workouts</button>
+      <button class="primary" id="vgo" onclick="doVacation()" disabled>Apply plan</button>
     </div>
   </div>
  </div>
@@ -673,7 +699,12 @@ PAGE = r"""<!DOCTYPE html>
  <div id="toast"></div>
 
 <script>
-let S={schedule:[],plan:null,runs:[],weeklyActual:{},wellness:null,month:null,undo:null,moveItem:null};
+const IS_MOBILE=matchMedia('(max-width:700px)').matches;
+let S={schedule:[],plan:null,runs:[],weeklyActual:{},wellness:null,month:null,
+ undo:null,moveItem:null,selDate:null,
+ planMode:(function(){try{return localStorage.getItem('coachPlanMode')||(IS_MOBILE?'list':'month');}
+  catch(e){return 'month';}})()};
+function setPlanMode(m){S.planMode=m;try{localStorage.setItem('coachPlanMode',m);}catch(e){}render();}
 const DAY=864e5;
 const fmt=d=>d.toISOString().slice(0,10);
 const parse=s=>new Date(s+'T12:00:00');
@@ -755,11 +786,53 @@ function render(){
  document.getElementById('wkmi').textContent=plan?(ran.toFixed(0)+' / '+Math.round(plan)):'—';
  renderStrip(today);
  renderBrief(today);
- renderGrid(today);
+ renderPlanTab(today);
  renderWeek(today);
  renderChart();
  renderRamp(wk);
  renderActs();
+}
+
+function renderPlanTab(today){
+ const list=S.planMode==='list';
+ document.getElementById('segList').className=list?'on':'';
+ document.getElementById('segMonth').className=list?'':'on';
+ document.getElementById('mnav').style.display=list?'none':'';
+ document.getElementById('calwrap').style.display=list?'none':'';
+ document.getElementById('planlist').style.display=list?'':'none';
+ if(list)renderPlanList(today);else renderGrid(today);
+}
+
+function renderPlanList(today){
+ const el=document.getElementById('planlist');
+ const items=S.schedule.slice().sort((a,b)=>a.date.localeCompare(b.date));
+ const ranByDate={};
+ S.runs.forEach(r=>ranByDate[r.date]=(ranByDate[r.date]||0)+r.mi);
+ let h='',lastWk=null;
+ items.forEach(it=>{
+  const wk=Math.floor((parse(it.date)-parse(S.plan.start))/DAY/7)+1;
+  if(wk!==lastWk){
+   h+='<div style="color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin:16px 0 4px">'+
+    'Week '+wk+' · '+(S.plan.plannedWeekly[wk]||'?')+' mi</div>';
+   lastWk=wk;
+  }
+  const past=it.date<today, isT=it.date===today, ran=ranByDate[it.date];
+  let status;
+  if(ran)status='<span style="color:var(--good);font-weight:700">✓ '+ran.toFixed(1)+'</span>';
+  else if(isT)status='<span style="color:var(--accent);font-weight:700">today</span>';
+  else if(past)status='<span style="color:var(--hard)">missed</span>';
+  else status='<span style="color:var(--faint)">›</span>';
+  h+='<div onclick="openDetail('+it.scheduleId+')" style="display:flex;gap:11px;align-items:center;'+
+   'padding:10px 2px;border-top:1px solid var(--line);cursor:pointer'+(past?';opacity:.55':'')+'">'+
+   '<span style="width:64px;flex:none;color:'+(isT?'var(--accent)':'var(--dim)')+';font-size:12.5px;font-weight:600">'+
+    parse(it.date).toLocaleDateString(undefined,{weekday:'short',day:'numeric'})+'</span>'+
+   '<span style="width:9px;height:9px;border-radius:5px;flex:none;background:var(--'+kindVar[kind(it.title)]+')"></span>'+
+   '<b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+    it.title.replace(/^W\d+ \w+ /,'')+'</b>'+
+   '<span style="color:var(--dim);font-size:12.5px">'+(S.plan.planMiles[it.title]||'?')+' mi</span>'+
+   status+'</div>';
+ });
+ el.innerHTML=h||'<p style="color:var(--dim)">No scheduled workouts — run upload first.</p>';
 }
 
 function renderActs(){
@@ -807,7 +880,7 @@ function renderStrip(today){
   const d=new Date(mon.getTime()+i*DAY),ds=fmt(d);
   const its=S.schedule.filter(x=>x.date===ds);
   const ran=runsOn(ds).length>0;
-  h+='<div class="wd'+(ds===today?' today':'')+'" onclick="stripTap(\''+ds+'\')">'+
+  h+='<div class="wd'+(ds===today?' today':'')+(ds===S.selDate?' sel':'')+'" onclick="stripTap(\''+ds+'\')">'+
    '<div class="l">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]+'</div>'+
    '<span class="n">'+d.getDate()+'</span>'+
    '<div class="dots">'+(ran?'<span class="ck">✓</span>':
@@ -817,10 +890,8 @@ function renderStrip(today){
  document.getElementById('wstrip').innerHTML=h;
 }
 function stripTap(ds){
- const rs=runsOn(ds).filter(r=>r.activityId).sort((a,b)=>b.mi-a.mi);
- const its=S.schedule.filter(x=>x.date===ds);
- if(rs.length)openRun(rs[0].activityId,its[0]?its[0].title:null);
- else if(its.length)openDetail(its[0].scheduleId);
+ S.selDate=(S.selDate===ds)?null:ds;   // tap again to return to today
+ render();
 }
 function estRange(title){
  const mi=S.plan.planMiles[title];if(!mi)return'';
@@ -830,25 +901,41 @@ function estRange(title){
 }
 function renderBrief(today){
  const br=document.getElementById('brief'),bn=document.getElementById('banner');
- const next=S.schedule.filter(i=>i.date>=today).sort((a,b)=>a.date.localeCompare(b.date))[0];
  const r=readiness();
  bn.className='banner';bn.textContent='';
- if(!next){br.style.display='none';return;}
- const isToday=next.date===today;
- const t=S.plan.planTargets[next.title];
- const done=isToday&&runsOn(today).length>0;
- const short=next.title.replace(/^W\d+ \w+ /,'');
- const rel=isToday?'Today':parse(next.date).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
- const wx=S.weather&&S.weather.tempF?
-  '<span class="wx">☁️ '+S.weather.tempF+'°'+
-   (S.weather.humidity>=70?' · '+S.weather.humidity+'% hum':'')+'</span>':'';
- br.style.setProperty('--bcolor','var(--'+kindVar[kind(next.title)]+')');
- let h='<div class="top"><div style="flex:1;min-width:0">'+
-  '<b>'+short+'</b>'+
-  '<div class="sub">'+rel+' · '+(S.plan.planMiles[next.title]||'?')+' mi · '+estRange(next.title)+
-  (t?' · '+t.label:'')+'</div></div>'+
-  (done?'<span class="donechip">✓ Done</span>':wx)+'</div>';
- if(r&&r.today){
+ // Focused item: the selected strip day, else today's workout, else next upcoming.
+ let item,fdate;
+ if(S.selDate){
+  fdate=S.selDate;
+  item=S.schedule.filter(i=>i.date===fdate)[0]||null;
+ }else{
+  item=S.schedule.filter(i=>i.date>=today).sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
+  fdate=item?item.date:today;
+ }
+ const isToday=fdate===today;
+ const runs=runsOn(fdate);
+ const bigRun=runs.filter(x=>x.activityId).sort((a,b)=>b.mi-a.mi)[0];
+ const rel=isToday?'Today':parse(fdate).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
+ const wx=(isToday&&S.weather&&S.weather.tempF)?
+  '<span class="wx">'+S.weather.tempF+'°'+
+   (S.weather.humidity>=70?' · '+S.weather.humidity+'%':'')+'</span>':'';
+ let h;
+ if(item){
+  const t=S.plan.planTargets[item.title];
+  const done=runs.length>0;
+  br.style.setProperty('--bcolor','var(--'+kindVar[kind(item.title)]+')');
+  h='<div class="top"><div style="flex:1;min-width:0">'+
+   '<b>'+item.title.replace(/^W\d+ \w+ /,'')+'</b>'+
+   '<div class="sub">'+rel+' · '+(S.plan.planMiles[item.title]||'?')+' mi · '+estRange(item.title)+
+   (t?' · '+t.label:'')+'</div></div>'+
+   (done?'<span class="donechip">✓ '+(bigRun?bigRun.mi.toFixed(1)+' mi':'Done')+'</span>':wx)+'</div>';
+ }else{
+  br.style.setProperty('--bcolor','var(--faint)');
+  h='<div class="top"><div style="flex:1;min-width:0"><b>Rest day</b>'+
+   '<div class="sub">'+rel+' · recovery is training too</div></div>'+
+   (bigRun?'<span class="donechip">✓ '+bigRun.mi.toFixed(1)+' mi unplanned</span>':wx)+'</div>';
+ }
+ if(isToday&&r&&r.today){
   h+='<div class="ready">'+
    (r.today.rhr?'<span>RHR <b>'+r.today.rhr+'</b>'+(r.base?' <span style="color:var(--faint)">(7-day '+r.base+')</span>':'')+'</span>':'')+
    (r.today.sleepH?'<span>Sleep <b>'+r.today.sleepH+'h</b></span>':'')+
@@ -856,13 +943,21 @@ function renderBrief(today){
    (r.level==='ok'?'<span style="color:var(--good)">● ready</span>':'')+'</div>';
  }
  const hot=S.weather&&(S.weather.feelsF>=80||(S.weather.tempF>=78&&S.weather.humidity>=70));
- if(hot&&isToday){
-  h+='<div class="ready" style="color:var(--tempo)">🔥 Feels like '+
+ if(hot&&isToday&&item){
+  h+='<div class="ready" style="color:var(--tempo)">Heat: feels like '+
    (S.weather.feelsF||S.weather.tempF)+'° — add 15–20s/mi to targets and hydrate; effort over pace today.</div>';
  }
- h+='<div class="cta"><button onclick="openDetail('+next.scheduleId+')">Details</button>'+
-  (done?'<button onclick="stripTap(\''+today+'\')">View run ▸</button>':'')+'</div>';
+ h+='<div class="cta">'+
+  (item?'<button onclick="openDetail('+item.scheduleId+')">Details</button>':'')+
+  (bigRun?'<button onclick="openRun(\''+bigRun.activityId+'\',\''+(item?item.title:'')+'\')">View run ▸</button>':'')+
+  '</div>';
  br.innerHTML=h;br.style.display='block';
+ const todayItem=S.schedule.filter(i=>i.date===today)[0];
+ if(r&&r.flags.length&&todayItem&&isHard(todayItem.title)&&!runsOn(today).length){
+  bn.className='banner '+(r.level==='red'?'red':'amber');
+  bn.textContent=(r.level==='red'?'Rough recovery: ':'Heads up: ')+r.flags.join(', ')+
+   '. Today is a quality day — consider swapping it with an easy day. One moved workout beats one forced injury.';
+ }
  if(r&&r.flags.length&&isToday&&isHard(next.title)){
   bn.className='banner '+(r.level==='red'?'red':'amber');
   bn.textContent=(r.level==='red'?'Rough recovery: ':'Heads up: ')+r.flags.join(', ')+
@@ -970,8 +1065,8 @@ function renderChart(){
  let s='<svg viewBox="0 0 '+W+' '+(H+22)+'" xmlns="http://www.w3.org/2000/svg" style="width:100%">';
  weeks.forEach((w,i)=>{
   const ph=(planned[w]||0)/maxv*H, ah=(S.weeklyActual[w]||0)/maxv*H, x=i*bw;
-  s+='<rect x="'+(x+3)+'" y="'+(H-ph)+'" width="'+(bw/2-5)+'" height="'+Math.max(ph,1)+'" fill="#5aa2ff" opacity=".85" rx="2"/>';
-  if(S.weeklyActual[w])s+='<rect x="'+(x+bw/2-1)+'" y="'+(H-ah)+'" width="'+(bw/2-5)+'" height="'+ah+'" fill="#34c77b" rx="2"/>';
+  s+='<rect x="'+(x+3)+'" y="'+(H-ph)+'" width="'+(bw/2-5)+'" height="'+Math.max(ph,1)+'" fill="#5b6671" opacity=".75" rx="2"/>';
+  if(S.weeklyActual[w])s+='<rect x="'+(x+bw/2-1)+'" y="'+(H-ah)+'" width="'+(bw/2-5)+'" height="'+ah+'" fill="#5DCAA5" rx="2"/>';
   s+='<text x="'+(x+bw/2)+'" y="'+(H+15)+'" fill="#93a0ad" font-size="10.5" text-anchor="middle">W'+w+'</text>';
  });
  document.getElementById('chart').innerHTML=s+'</svg>';
@@ -1022,6 +1117,8 @@ function enterMoveMode(sid){
  const it=S.schedule.find(i=>String(i.scheduleId)===String(sid));
  if(!it)return;
  closeDetail();
+ if(S.view!=='plan')setView('plan');
+ if(S.planMode!=='month'){S.planMode='month';render();}  // moving needs the grid
  S.moveItem=it;
  document.body.classList.add('movemode');
  toast('Tap a day to move <b>'+it.title.replace(/^W\d+ \w+ /,'')+'</b>',{sticky:1,cancel:1});
@@ -1182,35 +1279,81 @@ function renderRun(j,target,title){
  document.getElementById('rmodal').innerHTML=h;
 }
 
-/* ---------------- vacation mode ---------------- */
+/* ---------------- vacation mode: plan around it ---------------- */
+let VPLAN=null;
 function openVacation(){
  document.getElementById('scrim').classList.add('show');
- ['vfrom','vto','vdays'].forEach(id=>document.getElementById(id).oninput=previewVacation);
+ ['vfrom','vto'].forEach(id=>document.getElementById(id).oninput=previewVacation);
  previewVacation();
 }
 function closeVacation(){document.getElementById('scrim').classList.remove('show');}
-function previewVacation(){
- const f=document.getElementById('vfrom').value,tt=document.getElementById('vto').value;
- const days=parseInt(document.getElementById('vdays').value,10);
- const pv=document.getElementById('vpreview'),go=document.getElementById('vgo');
- if(!f||!tt||isNaN(days)){pv.textContent='Pick dates to preview.';go.disabled=true;return;}
- const hits=S.schedule.filter(i=>i.date>=f&&i.date<=tt);
- if(!hits.length){pv.textContent='No workouts in that range — nothing to move.';go.disabled=true;return;}
- pv.innerHTML=hits.map(i=>{
-  const nd=fmt(new Date(parse(i.date).getTime()+days*DAY));
-  return i.title+': '+i.date+' → <b>'+nd+'</b>';
- }).join('<br>');
- go.disabled=false;go.textContent='Move '+hits.length+' workout'+(hits.length>1?'s':'');
+
+function buildVacationPlan(f,t){
+ // Rule-based coach: easy/strides in range → skip (volume filler).
+ // Long runs and quality → first clean day after return, hard days never
+ // adjacent. Long runs prefer weekends.
+ const hits=S.schedule.filter(i=>i.date>=f&&i.date<=t)
+   .sort((a,b)=>a.date.localeCompare(b.date));
+ const occupied=new Set(S.schedule.filter(i=>i.date<f||i.date>t).map(i=>i.date));
+ const hardSet=new Set(S.schedule.filter(i=>(i.date<f||i.date>t)&&isHard(i.title)).map(i=>i.date));
+ const near=d=>hardSet.has(d)||hardSet.has(fmt(new Date(parse(d).getTime()-DAY)))||
+              hardSet.has(fmt(new Date(parse(d).getTime()+DAY)));
+ const isLong=ti=>/mi LR|MP Finish/.test(ti);
+ const actions=[];
+ function place(it,preferWeekend){
+  for(let k=1;k<=14;k++){
+   const d=fmt(new Date(parse(t).getTime()+k*DAY));
+   const dow=parse(d).getDay();
+   if(occupied.has(d))continue;
+   if(near(d))continue;
+   if(preferWeekend&&k<=9&&dow!==6&&dow!==0)continue;
+   occupied.add(d);hardSet.add(d);
+   actions.push({act:'move',it:it,to:d});
+   return;
+  }
+  actions.push({act:'skip',it:it,why:'no clean slot'});
+ }
+ hits.filter(i=>isLong(i.title)).forEach(i=>place(i,true));
+ hits.filter(i=>!isLong(i.title)&&isHard(i.title)).forEach(i=>place(i,false));
+ hits.filter(i=>!isHard(i.title)).forEach(i=>actions.push({act:'skip',it:i}));
+ actions.sort((a,b)=>a.it.date.localeCompare(b.it.date));
+ return actions;
 }
+
+function previewVacation(){
+ const f=document.getElementById('vfrom').value,t=document.getElementById('vto').value;
+ const pv=document.getElementById('vpreview'),go=document.getElementById('vgo');
+ VPLAN=null;
+ if(!f||!t||t<f){pv.textContent='Pick dates to preview.';go.disabled=true;return;}
+ const acts=buildVacationPlan(f,t);
+ if(!acts.length){pv.textContent='No workouts in that range — enjoy the trip.';go.disabled=true;return;}
+ VPLAN={from:f,to:t,actions:acts};
+ pv.innerHTML=acts.map(a=>{
+  const name=a.it.title.replace(/^W\d+ /,'');
+  if(a.act==='skip')
+   return '<span style="color:var(--faint)">skip</span> '+name+(a.why?' <span style="color:var(--faint)">('+a.why+')</span>':'');
+  return '<span style="color:var(--accent)">move</span> '+name+' → <b>'+
+   parse(a.to).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'</b>';
+ }).join('<br>');
+ const moves=acts.filter(a=>a.act==='move').length;
+ go.disabled=false;
+ go.textContent='Apply: move '+moves+', skip '+(acts.length-moves);
+}
+
 async function doVacation(){
- const f=document.getElementById('vfrom').value,tt=document.getElementById('vto').value;
- const days=parseInt(document.getElementById('vdays').value,10);
- closeVacation();toast('Moving workouts…',{sticky:1});
+ if(!VPLAN)return;
+ const acts=VPLAN.actions;
+ closeVacation();toast('Re-planning around your trip…',{sticky:1});
  try{
-  const r=await jpost('/api/shift_range',{from:f,to:tt,days:days});
-  toast('Moved '+r.moved+' workouts — sync your watch when you’re ready');
+  for(const a of acts){
+   if(a.act==='move')
+    await jpost('/api/move',{scheduleId:a.it.scheduleId,workoutId:a.it.workoutId,date:a.to});
+   else
+    await jpost('/api/unschedule',{scheduleId:a.it.scheduleId});
+  }
+  toast('Done — plan adjusted around your vacation. Sync your watch.');
   load(true);
- }catch(e){toast('Shift failed: '+e.message,{err:1});}
+ }catch(e){toast('Vacation plan failed partway: '+e.message+' — hit Refresh to see current state.',{err:1});load(true);}
 }
 
 try{setView(localStorage.getItem('coachView')||'today');}catch(e){setView('today');}
