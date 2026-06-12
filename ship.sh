@@ -14,8 +14,14 @@ python3 make_demo.py
 
 echo "▶ commit + push"
 git add builders.py plan.py upload_garmin_workouts.py test_upload_garmin.py \
-        coach.py make_demo.py docs/ README.md .gitignore ship.sh
+        coach.py make_demo.py docs/ README.md .gitignore ship.sh lan.sh
 git commit -m "$MSG" || echo "(nothing to commit)"
 git push
+
+# restart the background server (re-syncs code copy) so the phone app updates
+if launchctl print "gui/$(id -u)/com.earwin.mcmcoach" >/dev/null 2>&1; then
+  ./lan.sh restart
+  echo "▶ coach server restarted"
+fi
 
 echo "✅ shipped — live demo updates in ~2 min: https://earwintape-svg.github.io/mcm-coach/"

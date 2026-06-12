@@ -1,0 +1,105 @@
+#!/bin/bash
+# MCM Coach server manager — make "run the LAN" a thing of the past.
+#
+#   ./lan.sh install     install + start the always-on background server
+#                        (survives reboots, restarts if it crashes)
+#   ./lan.sh url         print the phone URL (with key)
+#   ./lan.sh status      is it running? + last log lines
+#   ./lan.sh restart     bounce it (e.g. after shipping new code)
+#   ./lan.sh uninstall   remove the background service
+set -e
+cd "$(dirname "$0")"
+
+LABEL="com.earwin.mcmcoach"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+LOG="$HOME/Library/Logs/mcmcoach.log"
+PY="$(command -v python3 || echo /usr/bin/python3)"
+# macOS blocks background services from reading ~/Documents (TCC privacy),
+# so the server runs from a synced copy in Application Support instead.
+APPDIR="$HOME/Library/Application Support/MCMCoach"
+
+sync_app() {
+  mkdir -p "$APPDIR"
+  cp coach.py plan.py builders.py upload_garmin_workouts.py "$APPDIR/"
+}
+
+make_plist() {
+  mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
+  cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$PY</string>
+    <string>coach.py</string>
+    <string>--lan</string>
+    <string>--no-browser</string>
+  </array>
+  <key>WorkingDirectory</key><string>$APPDIR</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PYTHONUNBUFFERED</key><string>1</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$LOG</string>
+  <key>StandardErrorPath</key><string>$LOG</string>
+</dict></plist>
+EOF
+}
+
+phone_url() {
+  IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo '<mac-ip>')"
+  KEY="$(cat "$HOME/.mcm_coach_key" 2>/dev/null || echo '<run install first>')"
+  echo "Phone (same Wi-Fi):  http://$IP:8765/?key=$KEY"
+  TSIP="$(command -v tailscale >/dev/null && tailscale ip -4 2>/dev/null | head -1 || true)"
+  if [ -n "$TSIP" ]; then
+    echo "Anywhere (Tailscale): http://$TSIP:8765/?key=$KEY"
+  fi
+  return 0
+}
+
+case "${1:-status}" in
+  install)
+    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    sync_app
+    : > "$LOG" 2>/dev/null || true   # fresh log each install
+    make_plist
+    launchctl bootstrap "gui/$(id -u)" "$PLIST"
+    sleep 2
+    echo "✅ installed — the coach server now runs in the background, always."
+    phone_url
+    ;;
+  uninstall)
+    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    rm -f "$PLIST"
+    echo "removed."
+    ;;
+  restart)
+    sync_app
+    launchctl kickstart -k "gui/$(id -u)/$LABEL"
+    echo "restarted with latest code."
+    ;;
+  url)
+    phone_url
+    ;;
+  status)
+    if launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
+      echo "● launchd job loaded"
+    else
+      echo "○ not installed — ./lan.sh install"
+    fi
+    if lsof -nP -iTCP:8765 -sTCP:LISTEN >/dev/null 2>&1; then
+      echo "● server listening on :8765"
+    else
+      echo "✗ NOT listening on :8765 — see log below"
+    fi
+    phone_url
+    echo "--- recent log ---"
+    tail -15 "$LOG" 2>/dev/null || echo "(no log yet)"
+    ;;
+  *)
+    echo "usage: ./lan.sh {install|url|status|restart|uninstall}"
+    ;;
+esac
