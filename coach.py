@@ -24,7 +24,10 @@ are someone else's business model.
 
 Python 3.9 stdlib only. `upload --force` resets dates to plan.py.
 """
+import argparse
+import hmac
 import json
+import os
 import secrets
 import socket
 import subprocess
@@ -291,17 +294,32 @@ ACCESS_KEY = None  # set in --lan mode; localhost is always allowed
 
 class Handler(BaseHTTPRequestHandler):
 
+    MAX_BODY = 64 * 1024  # plenty for any legitimate request
+
     def _authorized(self):
+        """Localhost is trusted; LAN clients need the key. Comparison is
+        constant-time (hmac.compare_digest) — never compare secrets with ==."""
         if ACCESS_KEY is None or self.client_address[0] in ("127.0.0.1", "::1"):
             return True
-        return (self.headers.get("X-Key") == ACCESS_KEY
-                or ("key=" + ACCESS_KEY) in self.path)
+        given = self.headers.get("X-Key") or ""
+        if hmac.compare_digest(given, ACCESS_KEY):
+            return True
+        query = self.path.split("?", 1)[1] if "?" in self.path else ""
+        return any(p.startswith("key=") and hmac.compare_digest(p[4:], ACCESS_KEY)
+                   for p in query.split("&"))
+
+    def _headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
 
     def _json(self, obj, code=200):
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self._headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -309,23 +327,27 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if not self._authorized():
                 return self._json({"error": "unauthorized — use the link with ?key=… printed in Terminal"}, 403)
-            if self.path == "/" or self.path.startswith("/index"):
+            route = self.path.split("?")[0]
+            if route == "/" or route.startswith("/index"):
                 body = PAGE.encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
+                self._headers()
                 self.end_headers()
                 self.wfile.write(body)
-            elif self.path.startswith("/api/data"):
+            elif route.startswith("/api/data"):
                 force = "refresh=1" in self.path
                 self._json({"plan": plan_summary(), "schedule": fetch_schedule(force)})
-            elif self.path.startswith("/api/actuals"):
+            elif route.startswith("/api/actuals"):
                 self._json(fetch_actuals())
-            elif self.path.startswith("/api/wellness"):
+            elif route.startswith("/api/wellness"):
                 self._json(fetch_wellness("refresh=1" in self.path))
-            elif self.path.startswith("/api/run/"):
-                aid = self.path.split("/api/run/")[1].split("?")[0]
-                self._json(fetch_run_detail(aid))
+            elif route.startswith("/api/run/"):
+                aid = route.split("/api/run/")[1]
+                if not aid.isdigit():           # activity ids are numeric
+                    return self._json({"error": "bad activity id"}, 400)
+                self._json(fetch_run_detail(int(aid)))
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as e:
@@ -336,15 +358,24 @@ class Handler(BaseHTTPRequestHandler):
             if not self._authorized():
                 return self._json({"error": "unauthorized"}, 403)
             n = int(self.headers.get("Content-Length") or 0)
+            if n > self.MAX_BODY:
+                return self._json({"error": "request too large"}, 413)
             req = json.loads(self.rfile.read(n) or b"{}")
             if self.path == "/api/move":
-                move_workout(req["scheduleId"], req["workoutId"], req["date"])
+                # ints + ISO date only — never format raw client input into API paths
+                move_workout(int(req["scheduleId"]), int(req["workoutId"]),
+                             str(req["date"]))
                 self._json({"ok": True})
             elif self.path == "/api/shift_range":
-                moved = shift_range(req["from"], req["to"], int(req["days"]))
+                days = int(req["days"])
+                if abs(days) > 90:
+                    return self._json({"error": "shift limited to ±90 days"}, 400)
+                moved = shift_range(str(req["from"]), str(req["to"]), days)
                 self._json({"ok": True, "moved": moved})
             else:
                 self._json({"error": "not found"}, 404)
+        except (KeyError, ValueError) as e:
+            self._json({"error": "bad request: %s" % e}, 400)
         except Exception as e:
             self._json({"error": str(e)}, 500)
 
@@ -448,7 +479,7 @@ PAGE = r"""<!DOCTYPE html>
  .modal p{color:var(--dim);margin:0 0 14px;font-size:13px}
  .modal label{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px}
  .modal input{width:100%;background:var(--cell);border:1px solid var(--line);color:var(--tx);
-  border-radius:9px;padding:9px 10px;font-size:15px;font-family:inherit}
+  border-radius:9px;padding:10px 11px;font-size:16px;font-family:inherit} /* 16px stops iOS zoom-on-focus */
  .modal .preview{background:var(--cell);border-radius:10px;padding:10px 12px;margin-top:12px;
   font-size:13px;color:var(--dim);max-height:150px;overflow:auto;line-height:1.6}
  .modal .row{display:flex;gap:9px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
@@ -474,13 +505,29 @@ PAGE = r"""<!DOCTYPE html>
  #toast.err{border-color:var(--hard)}
 
  @media (max-width:700px){
-  .wrap{padding:14px 8px 60px}
-  .hero h1{font-size:19px}
-  .stat{min-width:74px;padding:7px 10px}.stat b{font-size:17px}
-  .cell{min-height:64px;padding:3px}
-  .chip{font-size:9.5px;padding:3px 4px}.chip .mi{display:none}
+  .wrap{padding:max(12px,env(safe-area-inset-top)) 10px 76px}
+  .hero{gap:12px;margin-bottom:12px}
+  .hero h1{font-size:21px}
+  .hero .race{font-size:12px}
+  .stats{margin-left:0;width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .stat{min-width:0;padding:9px 6px}.stat b{font-size:19px}
   .legend{display:none}
-  .stats{margin-left:0}
+  .bar{gap:7px}
+  .bar button{padding:9px 12px}            /* >=44pt tap targets */
+  .mnav b{min-width:104px}
+  .cell{min-height:76px;padding:3px 2px}
+  .dnum{font-size:10.5px;margin-left:2px}
+  .cell.today .dnum b{width:19px;height:19px;font-size:10.5px}
+  .ran{font-size:9.5px}
+  .chip{font-size:10.5px;padding:5px 5px;border-radius:6px}
+  .chip .mi{display:none}
+  /* modals become bottom sheets — the native-app gesture language */
+  .scrim{align-items:flex-end;padding:0}
+  .modal{width:100%;max-width:100%;max-height:88vh;border-radius:18px 18px 0 0;
+   padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+  .runsheet{width:100%}
+  .statgrid b{font-size:15px}
+  .splitrow .pm{width:46px}
  }
 </style></head><body><div class="wrap">
 
@@ -1053,24 +1100,52 @@ def lan_ip():
         return None
 
 
+def _load_key():
+    """Persistent LAN key so the Home Screen bookmark survives restarts."""
+    key_file = os.path.expanduser("~/.mcm_coach_key")
+    try:
+        with open(key_file) as f:
+            key = f.read().strip()
+            if key:
+                return key
+    except FileNotFoundError:
+        pass
+    key = secrets.token_urlsafe(6)
+    with open(key_file, "w") as f:
+        f.write(key)
+    os.chmod(key_file, 0o600)
+    return key
+
+
 def main():
     global ACCESS_KEY
-    if "notify" in sys.argv[1:]:
+    ap = argparse.ArgumentParser(description="MCM Coach — training dashboard")
+    ap.add_argument("command", nargs="?", choices=["serve", "notify"], default="serve",
+                    help="serve (default) or notify (one-shot macOS notification)")
+    ap.add_argument("--lan", action="store_true",
+                    help="also listen on your Wi-Fi network (key-protected)")
+    ap.add_argument("--port", type=int, default=PORT)
+    ap.add_argument("--no-browser", action="store_true",
+                    help="don't auto-open the dashboard")
+    args = ap.parse_args()
+
+    if args.command == "notify":
         cmd_notify()
         return
-    lan = "--lan" in sys.argv[1:]
-    host = "0.0.0.0" if lan else "127.0.0.1"
-    server = ThreadingHTTPServer((host, PORT), Handler)
-    url = "http://127.0.0.1:%d" % PORT
+    host = "0.0.0.0" if args.lan else "127.0.0.1"
+    server = ThreadingHTTPServer((host, args.port), Handler)
+    url = "http://127.0.0.1:%d" % args.port
     print("Coach dashboard: %s  (Ctrl+C to stop)" % url)
-    if lan:
-        ACCESS_KEY = secrets.token_urlsafe(6)
+    if args.lan:
+        ACCESS_KEY = _load_key()
         ip = lan_ip()
         if ip:
-            print("On your phone (same Wi-Fi): http://%s:%d/?key=%s" % (ip, PORT, ACCESS_KEY))
+            print("On your phone (same Wi-Fi): http://%s:%d/?key=%s"
+                  % (ip, args.port, ACCESS_KEY))
             print("(the key keeps others on the network out — use the full link)")
             print("Tip: in Safari, Share → Add to Home Screen for an app-like icon.")
-    threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    if not args.no_browser:
+        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -94,7 +94,7 @@
  .modal p{color:var(--dim);margin:0 0 14px;font-size:13px}
  .modal label{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px}
  .modal input{width:100%;background:var(--cell);border:1px solid var(--line);color:var(--tx);
-  border-radius:9px;padding:9px 10px;font-size:15px;font-family:inherit}
+  border-radius:9px;padding:10px 11px;font-size:16px;font-family:inherit} /* 16px stops iOS zoom-on-focus */
  .modal .preview{background:var(--cell);border-radius:10px;padding:10px 12px;margin-top:12px;
   font-size:13px;color:var(--dim);max-height:150px;overflow:auto;line-height:1.6}
  .modal .row{display:flex;gap:9px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
@@ -120,13 +120,29 @@
  #toast.err{border-color:var(--hard)}
 
  @media (max-width:700px){
-  .wrap{padding:14px 8px 60px}
-  .hero h1{font-size:19px}
-  .stat{min-width:74px;padding:7px 10px}.stat b{font-size:17px}
-  .cell{min-height:64px;padding:3px}
-  .chip{font-size:9.5px;padding:3px 4px}.chip .mi{display:none}
+  .wrap{padding:max(12px,env(safe-area-inset-top)) 10px 76px}
+  .hero{gap:12px;margin-bottom:12px}
+  .hero h1{font-size:21px}
+  .hero .race{font-size:12px}
+  .stats{margin-left:0;width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .stat{min-width:0;padding:9px 6px}.stat b{font-size:19px}
   .legend{display:none}
-  .stats{margin-left:0}
+  .bar{gap:7px}
+  .bar button{padding:9px 12px}            /* >=44pt tap targets */
+  .mnav b{min-width:104px}
+  .cell{min-height:76px;padding:3px 2px}
+  .dnum{font-size:10.5px;margin-left:2px}
+  .cell.today .dnum b{width:19px;height:19px;font-size:10.5px}
+  .ran{font-size:9.5px}
+  .chip{font-size:10.5px;padding:5px 5px;border-radius:6px}
+  .chip .mi{display:none}
+  /* modals become bottom sheets — the native-app gesture language */
+  .scrim{align-items:flex-end;padding:0}
+  .modal{width:100%;max-width:100%;max-height:88vh;border-radius:18px 18px 0 0;
+   padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+  .runsheet{width:100%}
+  .statgrid b{font-size:15px}
+  .splitrow .pm{width:46px}
  }
 </style></head><body><div class="wrap">
 
