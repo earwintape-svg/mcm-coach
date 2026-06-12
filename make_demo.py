@@ -140,10 +140,17 @@ SHIM = """const DEMO=%s;
   else if(u.startsWith('/api/review')){resp={review:{week:5,mi:34.8,planned:36,runs:5,
    plannedRuns:5,onTarget:3,judged:3,vdot:49.1,
    line:'textbook week — the recovery is earned'}};}
+  else if(u.startsWith('/api/coach/apply')){resp={ok:true};}
+  else if(u.startsWith('/api/coach')){resp={proposals:[]};}
+  else if(u.startsWith('/api/run/')&&u.endsWith('/gear')){const b=JSON.parse(opts.body);
+   const aid=u.split('/')[3];D.actuals.ann=D.actuals.ann||{};
+   D.actuals.ann[aid]=Object.assign(D.actuals.ann[aid]||{},{shoes:b.gearId});resp={ok:true};}
   else if(u.startsWith('/api/gear')&&opts&&opts.method!=='GET'&&opts.body){resp={ok:true};}
   else if(u.startsWith('/api/gear')){resp={gear:[
-   {key:'pegasus 41',display:'Pegasus 41',mi:318,runs:21,last:'2026-07-22',threshold:400,retired:false},
-   {key:'endorphin pro',display:'Endorphin Pro',mi:64,runs:4,last:'2026-07-19',threshold:300,retired:false}]};}
+   {key:'asics gel nimbus 27',nickname:'Nimbus 27',display:'Nimbus 27',brand:'Asics',model:'Gel Nimbus 27',
+    mi:318,runs:21,last:'2026-07-22',threshold:400,retired:false,isDefault:true},
+   {key:'asics superblast',nickname:'Superblast',display:'Superblast',brand:'Asics',model:'Superblast',
+    mi:64,runs:4,last:'2026-07-19',threshold:400,retired:false,isDefault:false}]};}
   else if(u.startsWith('/api/annotate')){const b=JSON.parse(opts.body);
    D.actuals.ann=D.actuals.ann||{};
    D.actuals.ann[String(b.activityId)]={rpe:b.rpe,note:b.note,shoes:b.shoes};resp={ok:true};}
@@ -177,7 +184,7 @@ SHIM = """const DEMO=%s;
   else if(u.startsWith('/api/data'))resp=D.data;
   else if(u.startsWith('/api/actuals'))resp=D.actuals;
   else if(u.startsWith('/api/wellness'))resp=D.wellness;
-  else if(u.startsWith('/api/weather'))resp={tempF:84,feelsF:88,humidity:72};
+  else if(u.startsWith('/api/weather'))resp={tempF:84,feelsF:88,humidity:72,heatPct:0.05};
   else resp={error:'not found'};
   return {json:async()=>resp};
  };
@@ -196,9 +203,11 @@ SHIM = """const DEMO=%s;
 def main():
     data = build_demo_data()
     shim = "<script>" + SHIM % json.dumps(data) + "</script>\n"
-    marker = "<script>\nconst IS_MOBILE"
-    assert marker in coach.PAGE, "coach.PAGE layout changed; update make_demo.py"
-    html = coach.PAGE.replace(marker, shim + marker)
+    ui = coach._asset("ui.html").decode()
+    js = coach._asset("app.js").decode()
+    marker = '<script src="app.js"></script>'
+    assert marker in ui, "ui.html layout changed; update make_demo.py"
+    html = ui.replace(marker, shim + "<script>\n" + js + "\n</script>")
     html = html.replace('href="/apple-touch-icon.png"', 'href="apple-touch-icon.png"')
     os.makedirs("docs", exist_ok=True)
     with open(os.path.join("docs", "apple-touch-icon.png"), "wb") as f:
