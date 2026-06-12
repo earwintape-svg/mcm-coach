@@ -1,0 +1,14 @@
+.garmin_tokens/
+*.token
+.env
+pre_force_backup_*.json
+pre_delete_backup_*.json
+workout_*.json
+smoke.json
+runna.json
+old.json
+workout_json/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
