@@ -14,3 +14,4 @@ __pycache__/
 .DS_Store
 timely-backup.db
 timely.db*
+.ship_request

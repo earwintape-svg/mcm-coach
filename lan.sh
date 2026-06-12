@@ -129,7 +129,24 @@ EOF
     echo "--- recent log ---"
     tail -15 "$LOG" 2>/dev/null || echo "(no log yet)"
     ;;
+  watch)
+    # Leave this running in a Terminal tab: Claude drops a .ship_request
+    # file with a commit message, and this ships it — tests, demo, push,
+    # server restart — no copy/paste. Only ship.sh ever runs; the file
+    # content is used solely as the commit message.
+    echo "📡 autoship: watching for .ship_request (Ctrl+C to stop)"
+    while true; do
+      if [ -f ".ship_request" ]; then
+        MSG="$(head -c 200 .ship_request)"
+        rm -f .ship_request
+        echo "──▶ ship requested: $MSG"
+        ./ship.sh "$MSG" || echo "(ship failed — see above)"
+        echo "──▶ watching again…"
+      fi
+      sleep 3
+    done
+    ;;
   *)
-    echo "usage: ./lan.sh {install|url|status|restart|uninstall|notify-on|notify-off}"
+    echo "usage: ./lan.sh {install|url|status|restart|uninstall|notify-on|notify-off|watch}"
     ;;
 esac
