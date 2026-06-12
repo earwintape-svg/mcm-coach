@@ -119,7 +119,8 @@ def fetch_actuals():
         c = client()
         path = ("/activitylist-service/activities/search/activities"
                 "?start=0&limit=400&startDate=%s&endDate=%s"
-                % (PLAN_START.isoformat(), (RACE_DATE + timedelta(days=1)).isoformat()))
+                % ((PLAN_START - timedelta(days=30)).isoformat(),   # include tune-up runs
+                   (RACE_DATE + timedelta(days=1)).isoformat()))
         for a in api(c, path) or []:
             if "running" not in ((a.get("activityType") or {}).get("typeKey") or ""):
                 continue
@@ -977,8 +978,9 @@ function renderActs(){
  runs.forEach(r=>{
   const wk=Math.floor((parse(r.date)-parse(S.plan.start))/DAY/7)+1;
   if(wk!==lastWk){
-   h+='<div style="color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin:14px 0 2px">Week '+wk+
-    (S.weeklyActual[wk]?' · '+S.weeklyActual[wk]+' of '+(S.plan.plannedWeekly[wk]||'?')+' mi':'')+'</div>';
+   h+='<div style="color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin:14px 0 2px">'+
+    (wk<1?'Tune-up':'Week '+wk+
+    (S.weeklyActual[wk]?' · '+S.weeklyActual[wk]+' of '+(S.plan.plannedWeekly[wk]||'?')+' mi':''))+'</div>';
    lastWk=wk;
   }
   const it=S.schedule.find(i=>i.date===r.date);
@@ -1611,10 +1613,29 @@ def cmd_notify():
     print(msg)
     try:
         subprocess.run(["osascript", "-e",
-                        'display notification "%s" with title "MCM Coach"'
+                        'display notification "%s" with title "timely"'
                         % msg.replace('"', "'")], check=False)
     except Exception:
         pass
+    # Phone push via ntfy.sh: put your secret topic name in ~/.timely_ntfy
+    # (e.g. `echo timely-earwin-x7k2q > ~/.timely_ntfy`), subscribe to the
+    # same topic in the ntfy iOS app, and these notifications reach your
+    # phone anywhere. Topic name = the secret; make it unguessable.
+    try:
+        topic_file = os.path.expanduser("~/.timely_ntfy")
+        with open(topic_file) as f:
+            topic = f.read().strip()
+        if topic:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://ntfy.sh/" + topic, data=msg.encode("utf-8"),
+                headers={"Title": "timely", "Tags": "stopwatch"})
+            urllib.request.urlopen(req, timeout=10)
+            print("(pushed to phone via ntfy)")
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print("(phone push failed: %s)" % e)
 
 
 # -------------------------------------------------------------------- main

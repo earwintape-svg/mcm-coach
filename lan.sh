@@ -64,6 +64,7 @@ phone_url() {
 case "${1:-status}" in
   install)
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    sleep 2   # let launchd finish tearing down before re-bootstrapping
     sync_app
     : > "$LOG" 2>/dev/null || true   # fresh log each install
     make_plist

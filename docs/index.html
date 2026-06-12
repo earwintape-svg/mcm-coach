@@ -543,8 +543,9 @@ function renderActs(){
  runs.forEach(r=>{
   const wk=Math.floor((parse(r.date)-parse(S.plan.start))/DAY/7)+1;
   if(wk!==lastWk){
-   h+='<div style="color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin:14px 0 2px">Week '+wk+
-    (S.weeklyActual[wk]?' · '+S.weeklyActual[wk]+' of '+(S.plan.plannedWeekly[wk]||'?')+' mi':'')+'</div>';
+   h+='<div style="color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin:14px 0 2px">'+
+    (wk<1?'Tune-up':'Week '+wk+
+    (S.weeklyActual[wk]?' · '+S.weeklyActual[wk]+' of '+(S.plan.plannedWeekly[wk]||'?')+' mi':''))+'</div>';
    lastWk=wk;
   }
   const it=S.schedule.find(i=>i.date===r.date);
