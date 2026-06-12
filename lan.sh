@@ -20,7 +20,7 @@ APPDIR="$HOME/Library/Application Support/MCMCoach"
 
 sync_app() {
   mkdir -p "$APPDIR"
-  cp coach.py plan.py builders.py upload_garmin_workouts.py "$APPDIR/"
+  cp coach.py plan.py builders.py upload_garmin_workouts.py store.py "$APPDIR/"
 }
 
 make_plist() {

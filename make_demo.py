@@ -65,8 +65,10 @@ def build_demo_data():
                          "sleepH": round(random.uniform(6.8, 7.9), 1),
                          "bb": random.randint(70, 92)})
 
+    ann = {runs[4]["activityId"]: {"rpe": 3, "note": "Felt smooth, negative split",
+                                   "shoes": "Pegasus 41"}} if len(runs) > 4 else {}
     return {"data": {"plan": plan_sum, "schedule": schedule},
-            "actuals": {"weekly": weekly, "runs": runs},
+            "actuals": {"weekly": weekly, "runs": runs, "ann": ann},
             "wellness": {"days": days}}
 
 
@@ -129,6 +131,9 @@ SHIM = """const DEMO=%s;
   if(u.startsWith('/api/move')){const b=JSON.parse(opts.body);
    const it=D.data.schedule.find(i=>String(i.scheduleId)===String(b.scheduleId));
    if(it)it.date=b.date;resp={ok:true};}
+  else if(u.startsWith('/api/annotate')){const b=JSON.parse(opts.body);
+   D.actuals.ann=D.actuals.ann||{};
+   D.actuals.ann[String(b.activityId)]={rpe:b.rpe,note:b.note,shoes:b.shoes};resp={ok:true};}
   else if(u.startsWith('/api/unschedule')){const b=JSON.parse(opts.body);
    const i=D.data.schedule.findIndex(x=>String(x.scheduleId)===String(b.scheduleId));
    if(i>=0)D.data.schedule.splice(i,1);resp={ok:true};}

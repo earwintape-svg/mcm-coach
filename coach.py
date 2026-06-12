@@ -38,6 +38,7 @@ import webbrowser
 from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import store
 from plan import build_plan, PLAN_START, RACE_DATE
 from builders import MILE
 from upload_garmin_workouts import get_client, api, is_plan_name
@@ -86,36 +87,46 @@ def fetch_schedule(force=False):
     return out
 
 
-def fetch_actuals():
-    c = client()
-    path = ("/activitylist-service/activities/search/activities"
-            "?start=0&limit=400&startDate=%s&endDate=%s"
-            % (PLAN_START.isoformat(), (RACE_DATE + timedelta(days=1)).isoformat()))
-    acts = api(c, path) or []
-    weekly, runs = {}, []
-    for a in acts:
-        if "running" not in ((a.get("activityType") or {}).get("typeKey") or ""):
-            continue
-        day = (a.get("startTimeLocal") or "")[:10]
-        if not day:
-            continue
-        dist = a.get("distance") or 0.0
-        mi = dist / MILE
-        dur = a.get("movingDuration") or a.get("duration") or 0.0
-        pace_sec = int(dur / mi) if mi > 0.1 and dur else None
-        runs.append({
-            "activityId": a.get("activityId"),
-            "date": day,
-            "mi": round(mi, 2),
-            "paceSec": pace_sec,
-            "pace": ("%d:%02d" % (pace_sec // 60, pace_sec % 60)) if pace_sec else None,
-            "name": a.get("activityName") or "Run",
-        })
-        wk = (date.fromisoformat(day) - PLAN_START).days // 7 + 1
+def _weekly_of(runs):
+    weekly = {}
+    for r in runs:
+        wk = (date.fromisoformat(r["date"]) - PLAN_START).days // 7 + 1
         if 1 <= wk <= 19:
-            weekly[wk] = weekly.get(wk, 0.0) + mi
-    return {"weekly": {str(k): round(v, 1) for k, v in weekly.items()},
-            "runs": runs}
+            weekly[wk] = weekly.get(wk, 0.0) + (r.get("mi") or 0.0)
+    return {str(k): round(v, 1) for k, v in weekly.items()}
+
+
+def fetch_actuals():
+    """Runs from Garmin, mirrored into the local store. If Garmin is down,
+    serve from the store — the app keeps working offline."""
+    runs, stale = [], False
+    try:
+        c = client()
+        path = ("/activitylist-service/activities/search/activities"
+                "?start=0&limit=400&startDate=%s&endDate=%s"
+                % (PLAN_START.isoformat(), (RACE_DATE + timedelta(days=1)).isoformat()))
+        for a in api(c, path) or []:
+            if "running" not in ((a.get("activityType") or {}).get("typeKey") or ""):
+                continue
+            day = (a.get("startTimeLocal") or "")[:10]
+            if not day:
+                continue
+            mi = (a.get("distance") or 0.0) / MILE
+            dur = a.get("movingDuration") or a.get("duration") or 0.0
+            pace_sec = int(dur / mi) if mi > 0.1 and dur else None
+            runs.append({
+                "activityId": a.get("activityId"),
+                "date": day,
+                "mi": round(mi, 2),
+                "paceSec": pace_sec,
+                "pace": ("%d:%02d" % (pace_sec // 60, pace_sec % 60)) if pace_sec else None,
+                "name": a.get("activityName") or "Run",
+            })
+        store.upsert_runs(runs)
+    except Exception:
+        runs, stale = store.get_runs(), True
+    return {"weekly": _weekly_of(runs), "runs": runs,
+            "ann": store.get_annotations(), "stale": stale}
 
 
 def fetch_wellness(force=False):
@@ -149,7 +160,10 @@ def fetch_wellness(force=False):
                       or s.get("bodyBatteryHighestValue"),
             })
     except Exception as e:
-        out["error"] = str(e)
+        cached = store.get_wellness()
+        out = {"days": cached, "stale": True} if cached else {"error": str(e)}
+    if out.get("days") and not out.get("stale"):
+        store.upsert_wellness(out["days"])
     _cache.update(well=out, well_ts=time.time())
     return out
 
@@ -251,6 +265,7 @@ def move_workout(schedule_id, workout_id, new_date):
         pass
     api(c, "/workout-service/schedule/%s" % workout_id, method="POST",
         payload={"date": new_date})
+    store.log_event("move", workout_id, new_date)
     _cache["sched"] = None
 
 
@@ -258,6 +273,7 @@ def unschedule_workout(schedule_id):
     """Remove a workout from the calendar (the workout itself stays in the
     library). Used by vacation mode's 'skip' recommendations."""
     api(client(), "/workout-service/schedule/%d" % schedule_id, method="DELETE")
+    store.log_event("skip", schedule_id)
     _cache["sched"] = None
 
 
@@ -409,6 +425,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "moved": moved})
             elif self.path == "/api/unschedule":
                 unschedule_workout(int(req["scheduleId"]))
+                self._json({"ok": True})
+            elif self.path == "/api/annotate":
+                store.set_annotation(str(req["activityId"])[:32],
+                                     rpe=req.get("rpe"), note=req.get("note"),
+                                     shoes=req.get("shoes"))
                 self._json({"ok": True})
             else:
                 self._json({"error": "not found"}, 404)
@@ -746,7 +767,9 @@ async function load(force){
    const c=t<lo?lo:(t>hi?hi:t);S.month=c.getFullYear()*12+c.getMonth();
   }
   render();
-  jget('/api/actuals').then(j=>{S.runs=j.runs||[];S.weeklyActual=j.weekly||{};render();}).catch(()=>{});
+  jget('/api/actuals').then(j=>{S.runs=j.runs||[];S.weeklyActual=j.weekly||{};
+   S.ann=j.ann||{};if(j.stale)toast('Garmin unreachable — showing locally saved data',{err:1});
+   render();}).catch(()=>{});
   jget('/api/wellness').then(j=>{S.wellness=j;render();}).catch(()=>{});
   jget('/api/weather').then(j=>{S.weather=j;render();}).catch(()=>{});
  }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
@@ -867,6 +890,9 @@ function renderActs(){
    '<div style="text-align:right"><b>'+r.mi.toFixed(1)+' mi</b>'+
    '<div style="color:'+col+';font-size:12px">'+(r.pace?r.pace+'/mi':'')+
      (a&&a.paceMsg?' · '+a.paceMsg:'')+'</div></div>'+
+   (((S.ann||{})[String(r.activityId)]||{}).rpe?
+    '<span style="background:var(--cell);border:1px solid var(--line);border-radius:999px;'+
+    'padding:3px 8px;font-size:11px;color:var(--dim)">RPE '+S.ann[String(r.activityId)].rpe+'</span>':'')+
    '<span style="color:var(--faint)">›</span></div>';
  });
  el.innerHTML=h;
@@ -1186,7 +1212,9 @@ function ranTap(e,ds){
  const it=S.schedule.find(i=>i.date===ds);
  openRun(rs[0].activityId,it?it.title:null);
 }
+let CUR_AID=null,CUR_RPE=null;
 async function openRun(aid,title){
+ CUR_AID=aid;CUR_RPE=((S.ann||{})[String(aid)]||{}).rpe||null;
  const m=document.getElementById('rmodal');
  m.innerHTML='<div class="skel" style="padding:60px 20px"><i></i>Loading run from Garmin…</div>';
  document.getElementById('rscrim').classList.add('show');
@@ -1275,8 +1303,37 @@ function renderRun(j,target,title){
   if(ser.pace&&ser.pace.some(x=>x!=null)){h+='<h4>Pace</h4>'+lineSvg(ser.d,ser.pace,'#3ec6c0',true);}
   if(ser.hr&&ser.hr.some(x=>x!=null)){h+='<h4>Heart rate</h4>'+lineSvg(ser.d,ser.hr,'#ff6b6b',false);}
  }
- h+='<div class="row"><button class="primary" onclick="closeRun()">Done</button></div>';
+ const ann=(S.ann||{})[String(CUR_AID)]||{};
+ h+='<h4>How did it feel?</h4>'+
+  '<div style="display:flex;gap:6px;margin:2px 0 9px">'+
+  [1,2,3,4,5].map(n=>'<button id="rpe'+n+'" onclick="pickRpe('+n+')" style="flex:1'+
+   (ann.rpe===n?';background:var(--accent);color:var(--oninvert);border-color:var(--accent)':'')+
+   '">'+n+'</button>').join('')+'</div>'+
+  '<div style="display:flex;gap:8px;color:var(--faint);font-size:11px;justify-content:space-between;margin:-4px 2px 9px">'+
+  '<span>easy</span><span>max effort</span></div>'+
+  '<input id="annNote" placeholder="Notes — how it went, what hurt, what worked" value="'+
+   (ann.note||'').replace(/"/g,'&quot;')+'" style="width:100%;background:var(--cell);'+
+   'border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:10px 11px;font-size:16px;margin-bottom:8px">'+
+  '<input id="annShoes" placeholder="Shoes" value="'+(ann.shoes||'').replace(/"/g,'&quot;')+
+   '" style="width:100%;background:var(--cell);border:1px solid var(--line);color:var(--tx);'+
+   'border-radius:9px;padding:10px 11px;font-size:16px">';
+ h+='<div class="row"><button onclick="saveAnn()">Save log</button>'+
+  '<button class="primary" onclick="closeRun()">Done</button></div>';
  document.getElementById('rmodal').innerHTML=h;
+}
+function pickRpe(n){
+ CUR_RPE=(CUR_RPE===n)?null:n;
+ [1,2,3,4,5].forEach(k=>{const b=document.getElementById('rpe'+k);
+  if(!b)return;
+  b.style.cssText='flex:1'+(CUR_RPE===k?';background:var(--accent);color:var(--oninvert);border-color:var(--accent)':'');});
+}
+async function saveAnn(){
+ const note=document.getElementById('annNote').value,shoes=document.getElementById('annShoes').value;
+ try{
+  await jpost('/api/annotate',{activityId:CUR_AID,rpe:CUR_RPE,note:note,shoes:shoes});
+  S.ann=S.ann||{};S.ann[String(CUR_AID)]={rpe:CUR_RPE,note:note,shoes:shoes};
+  toast('Logged — this is your data now');render();
+ }catch(e){toast('Save failed: '+e.message,{err:1});}
 }
 
 /* ---------------- vacation mode: plan around it ---------------- */

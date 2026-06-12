@@ -14,7 +14,7 @@ python3 make_demo.py
 
 echo "▶ commit + push"
 git add builders.py plan.py upload_garmin_workouts.py test_upload_garmin.py \
-        coach.py make_demo.py docs/ README.md .gitignore ship.sh lan.sh
+        coach.py store.py make_demo.py docs/ README.md .gitignore ship.sh lan.sh WRITEUP.md
 git commit -m "$MSG" || echo "(nothing to commit)"
 git push
 
