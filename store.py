@@ -52,6 +52,28 @@ CREATE TABLE IF NOT EXISTS annotations(
   shoes TEXT,
   updated_at REAL
 );
+CREATE TABLE IF NOT EXISTS raw_activities(
+  activity_id TEXT PRIMARY KEY,
+  json TEXT,
+  synced_at REAL
+);
+CREATE TABLE IF NOT EXISTS run_details(
+  activity_id TEXT PRIMARY KEY,
+  json TEXT,
+  synced_at REAL
+);
+CREATE TABLE IF NOT EXISTS weather_log(
+  date TEXT PRIMARY KEY,
+  json TEXT,
+  synced_at REAL
+);
+CREATE TABLE IF NOT EXISTS external_metrics(
+  source TEXT,
+  date TEXT,
+  json TEXT,
+  synced_at REAL,
+  PRIMARY KEY(source, date)
+);
 """
 
 
@@ -132,6 +154,49 @@ def set_annotation(activity_id, rpe=None, note=None, shoes=None):
         c.execute("INSERT OR REPLACE INTO annotations VALUES(?,?,?,?,?)",
                   (str(activity_id), rpe, (note or "")[:500], (shoes or "")[:100],
                    time.time()))
+
+
+def save_raw_activity(activity_id, payload):
+    """Garmin's complete activity record, untouched. Cheap to keep, and
+    every future feature (cadence trends, training effect, VO2max) mines it
+    without another API design round-trip."""
+    init()
+    with _lock, _conn() as c:
+        c.execute("INSERT OR REPLACE INTO raw_activities VALUES(?,?,?)",
+                  (str(activity_id), json.dumps(payload), time.time()))
+
+
+def save_run_detail(activity_id, detail):
+    init()
+    with _lock, _conn() as c:
+        c.execute("INSERT OR REPLACE INTO run_details VALUES(?,?,?)",
+                  (str(activity_id), json.dumps(detail), time.time()))
+
+
+def get_run_detail(activity_id):
+    init()
+    with _lock, _conn() as c:
+        row = c.execute("SELECT json FROM run_details WHERE activity_id=?",
+                        (str(activity_id),)).fetchone()
+    return json.loads(row["json"]) if row else None
+
+
+def save_weather(day, wx):
+    """Today's conditions, kept — so 'pace vs heat' is answerable in October."""
+    init()
+    with _lock, _conn() as c:
+        c.execute("INSERT OR REPLACE INTO weather_log VALUES(?,?,?)",
+                  (day, json.dumps(wx), time.time()))
+
+
+def save_external(source, day, payload):
+    """Generic inbox for any other source (Apple Health via Health Auto
+    Export / iOS Shortcuts, a smart scale, anything that can POST JSON).
+    One row per source per day; new sources never require schema changes."""
+    init()
+    with _lock, _conn() as c:
+        c.execute("INSERT OR REPLACE INTO external_metrics VALUES(?,?,?,?)",
+                  (source[:40], day, json.dumps(payload), time.time()))
 
 
 def get_annotations():

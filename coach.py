@@ -114,6 +114,8 @@ def fetch_actuals():
             mi = (a.get("distance") or 0.0) / MILE
             dur = a.get("movingDuration") or a.get("duration") or 0.0
             pace_sec = int(dur / mi) if mi > 0.1 and dur else None
+            if a.get("activityId"):
+                store.save_raw_activity(a["activityId"], a)
             runs.append({
                 "activityId": a.get("activityId"),
                 "date": day,
@@ -171,7 +173,13 @@ def fetch_wellness(force=False):
 def fetch_run_detail(activity_id):
     """One run's full story: summary stats, laps, downsampled pace/HR/elev
     series, and the GPS trace (rendered as an abstract route — no map tiles,
-    no third-party requests, no home-location leak)."""
+    no third-party requests, no home-location leak).
+
+    Cached forever in the local store after first fetch — past runs don't
+    change, so run sheets open instantly and work offline."""
+    cached = store.get_run_detail(activity_id)
+    if cached:
+        return cached
     c = client()
     summ = api(c, "/activity-service/activity/%s" % activity_id) or {}
     s = summ.get("summaryDTO") or {}
@@ -229,6 +237,8 @@ def fetch_run_detail(activity_id):
         out["route"] = rt
     except Exception:
         pass
+    if out["laps"] or out.get("series"):
+        store.save_run_detail(activity_id, out)
     return out
 
 
@@ -250,6 +260,8 @@ def fetch_weather():
                "humidity": cur.get("relative_humidity_2m")}
     except Exception as e:
         out = {"error": str(e)}
+    if out.get("tempF") is not None:
+        store.save_weather(date.today().isoformat(), out)
     _cache.update(wx=out, wx_ts=time.time())
     return out
 
@@ -425,6 +437,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True, "moved": moved})
             elif self.path == "/api/unschedule":
                 unschedule_workout(int(req["scheduleId"]))
+                self._json({"ok": True})
+            elif self.path == "/api/import":
+                # Generic intake: {"source":"apple_health","date":"2026-06-15","metrics":{...}}
+                date.fromisoformat(str(req["date"]))
+                store.save_external(str(req["source"]), str(req["date"]),
+                                    req.get("metrics") or {})
                 self._json({"ok": True})
             elif self.path == "/api/annotate":
                 store.set_annotation(str(req["activityId"])[:32],
