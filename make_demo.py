@@ -137,6 +137,7 @@ SHIM = """const DEMO=%s;
   else if(u.startsWith('/api/data'))resp=D.data;
   else if(u.startsWith('/api/actuals'))resp=D.actuals;
   else if(u.startsWith('/api/wellness'))resp=D.wellness;
+  else if(u.startsWith('/api/weather'))resp={tempF:84,feelsF:88,humidity:72};
   else resp={error:'not found'};
   return {json:async()=>resp};
  };

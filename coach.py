@@ -43,9 +43,13 @@ from builders import MILE
 from upload_garmin_workouts import get_client, api, is_plan_name
 
 PORT = 8765
+# Weather location (NYC default) — override with env vars if you move.
+WX_LAT = float(os.environ.get("COACH_LAT", "40.78"))
+WX_LON = float(os.environ.get("COACH_LON", "-73.97"))
 _client = None
 _client_lock = threading.Lock()
-_cache = {"sched": None, "ts": 0.0, "well": None, "well_ts": 0.0}
+_cache = {"sched": None, "ts": 0.0, "well": None, "well_ts": 0.0,
+          "wx": None, "wx_ts": 0.0}
 
 
 def client():
@@ -214,6 +218,28 @@ def fetch_run_detail(activity_id):
     return out
 
 
+def fetch_weather():
+    """Current conditions from Open-Meteo (free, no key). 30-min cache.
+    Heat + humidity are the two numbers that change how a run should feel."""
+    if _cache["wx"] is not None and time.time() - _cache["wx_ts"] < 1800:
+        return _cache["wx"]
+    out = {}
+    try:
+        import urllib.request
+        url = ("https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s"
+               "&current=temperature_2m,apparent_temperature,relative_humidity_2m"
+               "&temperature_unit=fahrenheit" % (WX_LAT, WX_LON))
+        with urllib.request.urlopen(url, timeout=6) as r:
+            cur = (json.load(r).get("current") or {})
+        out = {"tempF": round(cur.get("temperature_2m") or 0),
+               "feelsF": round(cur.get("apparent_temperature") or 0),
+               "humidity": cur.get("relative_humidity_2m")}
+    except Exception as e:
+        out = {"error": str(e)}
+    _cache.update(wx=out, wx_ts=time.time())
+    return out
+
+
 # ----------------------------------------------------------- Garmin writes
 
 def move_workout(schedule_id, workout_id, new_date):
@@ -343,6 +369,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(fetch_actuals())
             elif route.startswith("/api/wellness"):
                 self._json(fetch_wellness("refresh=1" in self.path))
+            elif route.startswith("/api/weather"):
+                self._json(fetch_weather())
             elif route.startswith("/api/run/"):
                 aid = route.split("/api/run/")[1]
                 if not aid.isdigit():           # activity ids are numeric
@@ -411,12 +439,29 @@ PAGE = r"""<!DOCTYPE html>
  .stat b{display:block;font-size:20px;letter-spacing:-.5px}
  .stat span{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
 
+ .wstrip{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);
+  border-radius:15px;padding:10px 6px 8px;margin-bottom:12px}
+ .wd{flex:1;text-align:center;cursor:pointer;border-radius:10px;padding:4px 0}
+ .wd:hover{background:#1b222b}
+ .wd .l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+ .wd .n{font-size:14px;font-weight:600;margin:4px 0 3px;width:28px;height:28px;line-height:28px;
+  border-radius:50%;display:inline-block}
+ .wd.today .n{background:var(--accent);color:#fff}
+ .wd .dots{height:10px;display:flex;gap:3px;justify-content:center;align-items:center}
+ .wd .dots i{width:7px;height:7px;border-radius:4px;display:inline-block}
+ .wd .dots .ck{color:var(--good);font-size:10px;font-weight:800;line-height:10px}
  .brief{background:linear-gradient(135deg,#1a2433,#16202c);border:1px solid #27384d;
-  border-radius:15px;padding:14px 18px;margin-bottom:14px}
- .brief .top{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
- .brief .dot{width:10px;height:10px;border-radius:5px;flex:none}
- .brief b{font-size:15px}
- .brief .sub{color:var(--dim);font-size:13px}
+  border-radius:15px;padding:15px 18px 14px 22px;margin-bottom:14px;position:relative;overflow:hidden}
+ .brief::before{content:'';position:absolute;left:0;top:0;bottom:0;width:6px;
+  background:var(--bcolor,var(--easy))}
+ .brief .top{display:flex;gap:12px;align-items:flex-start}
+ .brief b{font-size:18px;letter-spacing:-.3px}
+ .brief .sub{color:var(--dim);font-size:13px;margin-top:3px}
+ .wx{background:#11161b;border:1px solid var(--line);border-radius:999px;
+  padding:6px 12px;font-size:13px;white-space:nowrap;margin-left:auto;flex:none}
+ .donechip{background:var(--good);color:#06210f;border-radius:999px;padding:6px 12px;
+  font-size:12.5px;font-weight:700;margin-left:auto;flex:none}
+ .brief .cta{margin-top:11px;display:flex;gap:8px}
  .ready{display:flex;gap:14px;margin-top:9px;flex-wrap:wrap;color:var(--dim);font-size:12.5px}
  .ready b{color:var(--tx);font-weight:600}
  .banner{border-radius:12px;padding:10px 15px;margin-bottom:14px;font-size:13.5px;display:none}
@@ -541,6 +586,7 @@ PAGE = r"""<!DOCTYPE html>
    </div>
  </div>
 
+ <div class="wstrip" id="wstrip"></div>
  <div class="banner" id="banner"></div>
  <div class="brief" id="brief" style="display:none"></div>
 
@@ -644,6 +690,7 @@ async function load(force){
   render();
   jget('/api/actuals').then(j=>{S.runs=j.runs||[];S.weeklyActual=j.weekly||{};render();}).catch(()=>{});
   jget('/api/wellness').then(j=>{S.wellness=j;render();}).catch(()=>{});
+  jget('/api/weather').then(j=>{S.weather=j;render();}).catch(()=>{});
  }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
 }
 function nav(d){S.month+=d;render();}
@@ -670,6 +717,7 @@ function render(){
  const wk=Math.floor((parse(today)-parse(S.plan.start))/DAY/7)+1;
  const ran=S.weeklyActual[wk]||0, plan=S.plan.plannedWeekly[wk];
  document.getElementById('wkmi').textContent=plan?(ran.toFixed(0)+' / '+Math.round(plan)):'—';
+ renderStrip(today);
  renderBrief(today);
  renderGrid(today);
  renderWeek(today);
@@ -677,6 +725,35 @@ function render(){
  renderRamp(wk);
 }
 
+function renderStrip(today){
+ const t=parse(today);
+ const mon=new Date(t);mon.setDate(t.getDate()-((t.getDay()+6)%7));
+ let h='';
+ for(let i=0;i<7;i++){
+  const d=new Date(mon.getTime()+i*DAY),ds=fmt(d);
+  const its=S.schedule.filter(x=>x.date===ds);
+  const ran=runsOn(ds).length>0;
+  h+='<div class="wd'+(ds===today?' today':'')+'" onclick="stripTap(\''+ds+'\')">'+
+   '<div class="l">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]+'</div>'+
+   '<span class="n">'+d.getDate()+'</span>'+
+   '<div class="dots">'+(ran?'<span class="ck">✓</span>':
+    its.slice(0,3).map(x=>'<i style="background:var(--'+kindVar[kind(x.title)]+')"></i>').join(''))+
+   '</div></div>';
+ }
+ document.getElementById('wstrip').innerHTML=h;
+}
+function stripTap(ds){
+ const rs=runsOn(ds).filter(r=>r.activityId).sort((a,b)=>b.mi-a.mi);
+ const its=S.schedule.filter(x=>x.date===ds);
+ if(rs.length)openRun(rs[0].activityId,its[0]?its[0].title:null);
+ else if(its.length)openDetail(its[0].scheduleId);
+}
+function estRange(title){
+ const mi=S.plan.planMiles[title];if(!mi)return'';
+ const t=S.plan.planTargets[title];
+ const lo=Math.round(mi*(t?t.fastSec:585)/60),hi=Math.round(mi*(t?t.slowSec:630)/60);
+ return lo+'–'+hi+'m';
+}
 function renderBrief(today){
  const br=document.getElementById('brief'),bn=document.getElementById('banner');
  const next=S.schedule.filter(i=>i.date>=today).sort((a,b)=>a.date.localeCompare(b.date))[0];
@@ -685,11 +762,18 @@ function renderBrief(today){
  if(!next){br.style.display='none';return;}
  const isToday=next.date===today;
  const t=S.plan.planTargets[next.title];
+ const done=isToday&&runsOn(today).length>0;
+ const short=next.title.replace(/^W\d+ \w+ /,'');
  const rel=isToday?'Today':parse(next.date).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
- let h='<div class="top"><div class="dot" style="background:var(--'+kindVar[kind(next.title)]+')"></div>'+
-  '<div><b>'+(isToday?'Today: ':'Up next: ')+next.title+'</b> '+
-  '<span class="sub">· '+rel+' · '+(S.plan.planMiles[next.title]||'?')+' mi'+
-  (t?' · '+t.label:'')+'</span></div></div>';
+ const wx=S.weather&&S.weather.tempF?
+  '<span class="wx">☁️ '+S.weather.tempF+'°'+
+   (S.weather.humidity>=70?' · '+S.weather.humidity+'% hum':'')+'</span>':'';
+ br.style.setProperty('--bcolor','var(--'+kindVar[kind(next.title)]+')');
+ let h='<div class="top"><div style="flex:1;min-width:0">'+
+  '<b>'+short+'</b>'+
+  '<div class="sub">'+rel+' · '+(S.plan.planMiles[next.title]||'?')+' mi · '+estRange(next.title)+
+  (t?' · '+t.label:'')+'</div></div>'+
+  (done?'<span class="donechip">✓ Done</span>':wx)+'</div>';
  if(r&&r.today){
   h+='<div class="ready">'+
    (r.today.rhr?'<span>RHR <b>'+r.today.rhr+'</b>'+(r.base?' <span style="color:var(--faint)">(7-day '+r.base+')</span>':'')+'</span>':'')+
@@ -697,6 +781,13 @@ function renderBrief(today){
    ((r.today.bb!==null&&r.today.bb!==undefined)?'<span>Body Battery <b>'+r.today.bb+'</b></span>':'')+
    (r.level==='ok'?'<span style="color:var(--good)">● ready</span>':'')+'</div>';
  }
+ const hot=S.weather&&(S.weather.feelsF>=80||(S.weather.tempF>=78&&S.weather.humidity>=70));
+ if(hot&&isToday){
+  h+='<div class="ready" style="color:var(--tempo)">🔥 Feels like '+
+   (S.weather.feelsF||S.weather.tempF)+'° — add 15–20s/mi to targets and hydrate; effort over pace today.</div>';
+ }
+ h+='<div class="cta"><button onclick="openDetail('+next.scheduleId+')">Details</button>'+
+  (done?'<button onclick="stripTap(\''+today+'\')">View run ▸</button>':'')+'</div>';
  br.innerHTML=h;br.style.display='block';
  if(r&&r.flags.length&&isToday&&isHard(next.title)){
   bn.className='banner '+(r.level==='red'?'red':'amber');

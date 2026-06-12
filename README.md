@@ -39,6 +39,20 @@ python3 coach.py     # opens http://127.0.0.1:8765
 
 Local web app (stdlib only, same Garmin tokens): 19-week calendar read live from your Connect schedule, move any workout to a new date, shift a whole week for vacations, weekly planned-vs-actual mileage chart, race countdown. Moves sync to Garmin immediately — sync the watch after. Caveat: `upload --force` re-schedules everything back to plan.py dates, wiping dashboard moves.
 
+## Portfolio demo (no Garmin account needed)
+
+```bash
+python3 make_demo.py     # builds demo/index.html — one static file
+```
+
+The full UI on a synthetic athlete (mid-week-6: on-target runs, one missed day, one slow tempo, a short-sleep readiness banner). Drag-and-drop, vacation mode, and the report card all work — every API call is intercepted by a fetch shim over embedded sample data. Deploy `demo/` to GitHub Pages / Vercel / Netlify. Generated from the real app's UI, so it can't drift.
+
+## Security
+
+- Tokens live in `~/.garmin_tokens` (outside the repo); password entry uses `getpass`, never logged. The `.gitignore` blocks tokens, backups, and fetched workout JSON from commits.
+- `--lan` mode requires a per-session secret (`?key=…` printed in Terminal); localhost is always allowed. Without the key, other devices on your Wi-Fi get 403.
+- This app uses Garmin's unofficial consumer API via your own login — fine for personal use, not a basis for hosting other people's accounts. A multi-user product would need Garmin's official Connect Developer Program (OAuth) and a real backend.
+
 ## Tests
 
 ```bash
