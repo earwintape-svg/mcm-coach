@@ -375,6 +375,129 @@ def plan_summary():
     return dict(_PLAN_SUMMARY)
 
 
+# ----------------------------------------------------------------- app icon
+
+_ICON = None
+
+
+def _icon_png():
+    """180x180 apple-touch-icon: the chevrons on Asphalt — rendered with
+    pure stdlib (zlib PNG). No Pillow, no asset files, can't go missing."""
+    global _ICON
+    if _ICON is not None:
+        return _ICON
+    import struct
+    import zlib
+    S, R = 180, 10.0
+    BG, MINT, CORAL = (16, 20, 24), (93, 202, 165), (240, 153, 123)
+    mint_segs = [(56, 56, 93, 90), (93, 90, 56, 124)]
+    coral_segs = [(101, 68, 129, 90), (129, 90, 101, 113)]
+
+    def dist(px, py, segs):
+        best = 1e9
+        for ax, ay, bx, by in segs:
+            vx, vy = bx - ax, by - ay
+            t = max(0.0, min(1.0, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)))
+            dx, dy = px - (ax + t * vx), py - (ay + t * vy)
+            best = min(best, (dx * dx + dy * dy) ** 0.5)
+        return best
+
+    def mix(a, b, t):
+        return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+    rows = []
+    for y in range(S):
+        row = bytearray()
+        for x in range(S):
+            c = BG
+            d1, d2 = dist(x, y, mint_segs), dist(x, y, coral_segs)
+            d, col = (d2, CORAL) if d2 <= d1 else (d1, MINT)
+            if d <= R + 1:
+                c = mix(c, col, max(0.0, min(1.0, R + 1 - d)))
+            row += bytes(c)
+        rows.append(bytes(row))
+
+    def chunk(tag, data):
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff))
+    raw = b"".join(b"\x00" + r for r in rows)
+    _ICON = (b"\x89PNG\r\n\x1a\n"
+             + chunk(b"IHDR", struct.pack(">IIBBBBB", S, S, 8, 2, 0, 0, 0))
+             + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    return _ICON
+
+
+# ------------------------------------------------------------- week review
+
+def build_week_review(week=None):
+    """One honest sentence about the week, computed from the store."""
+    today = date.today()
+    if week is None:
+        week = (today - PLAN_START).days // 7 + 1
+    if week < 1 or week > 19:
+        return None
+    start = PLAN_START + timedelta(days=(week - 1) * 7)
+    end = start + timedelta(days=6)
+    s0, s1 = start.isoformat(), end.isoformat()
+    runs = [r for r in store.get_runs() if s0 <= r["date"] <= s1]
+    mi = round(sum(r.get("mi") or 0 for r in runs), 1)
+    ps = plan_summary()
+    planned = ps["plannedWeekly"].get(str(week)) or 0
+    sched = [s for s in fetch_schedule() if s0 <= s["date"] <= s1]
+    by_date = {}
+    for r in runs:
+        if r["date"] not in by_date or r["mi"] > by_date[r["date"]]["mi"]:
+            by_date[r["date"]] = r
+    hit = judged = 0
+    easy_paces = []
+    for s in sched:
+        r = by_date.get(s["date"])
+        if not r:
+            continue
+        t = ps["planTargets"].get(s["title"])
+        pm = ps["planMiles"].get(s["title"]) or 0
+        if t is None and r.get("paceSec"):
+            easy_paces.append(r["paceSec"])
+        if t and r.get("paceSec"):
+            judged += 1
+            if (r["mi"] >= 0.9 * pm
+                    and t["fastSec"] - 10 <= r["paceSec"] <= t["slowSec"] + 10):
+                hit += 1
+    if easy_paces and sum(easy_paces) / len(easy_paces) < 575:   # < ~9:35/mi
+        line = "easy days drifted fast — protect them, they fund the hard ones"
+    elif planned and mi >= 0.95 * planned:
+        line = "textbook week — the recovery is earned"
+    elif planned and mi < 0.6 * planned:
+        line = "rough week — absorb it and move on; the plan survives"
+    else:
+        line = "solid — keep stacking"
+    vd = (fetch_fitness() or {}).get("current")
+    rev = {"week": week, "mi": mi, "planned": planned, "runs": len(by_date),
+           "plannedRuns": len(sched), "onTarget": hit, "judged": judged,
+           "vdot": vd, "line": line}
+    store.save_review(week, rev)
+    return rev
+
+
+def fetch_trends():
+    well = store.get_wellness(35)
+    rhr = [{"d": w["date"], "v": w["rhr"]} for w in reversed(well) if w.get("rhr")]
+    ps = plan_summary()
+    titles = {s["date"]: s["title"] for s in fetch_schedule()}
+    buckets = {}
+    for r in store.get_runs():
+        t = titles.get(r["date"])
+        if not t or ps["planTargets"].get(t) is not None or not r.get("paceSec"):
+            continue
+        wk = (date.fromisoformat(r["date"]) - PLAN_START).days // 7 + 1
+        buckets.setdefault(wk, []).append(r["paceSec"])
+    easy = []
+    for wk in sorted(buckets):
+        v = sorted(buckets[wk])
+        easy.append({"w": wk, "v": v[len(v) // 2]})
+    return {"rhr": rhr, "easy": easy}
+
+
 # ------------------------------------------------------------ fitness math
 
 def _vdot_of(meters, sec):
@@ -466,9 +589,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
+            route = self.path.split("?")[0]
+            if route == "/apple-touch-icon.png":   # public asset (iOS fetches keyless)
+                body = _icon_png()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "max-age=86400")
+                self.end_headers()
+                return self.wfile.write(body)
             if not self._authorized():
                 return self._json({"error": "unauthorized — use the link with ?key=… printed in Terminal"}, 403)
-            route = self.path.split("?")[0]
             if route == "/" or route.startswith("/index"):
                 body = PAGE.encode()
                 self.send_response(200)
@@ -490,6 +621,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(fetch_fitness())
             elif route.startswith("/api/gear"):
                 self._json({"gear": store.gear_summary()})
+            elif route.startswith("/api/trends"):
+                self._json(fetch_trends())
+            elif route.startswith("/api/review"):
+                today = date.today()
+                wk = (today - timedelta(days=1) - PLAN_START).days // 7 + 1
+                rev = (store.get_review(wk) or build_week_review(wk)) \
+                    if today.weekday() in (6, 0) else None
+                self._json({"review": rev})
             elif route.startswith("/api/run/"):
                 aid = route.split("/api/run/")[1]
                 if not aid.isdigit():           # activity ids are numeric
@@ -552,6 +691,7 @@ class Handler(BaseHTTPRequestHandler):
 
 PAGE = r"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>timely — run on time</title>
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101418'/%3E%3Cpath d='M20 20 L33 32 L20 44' fill='none' stroke='%235DCAA5' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 24 L46 32 L36 40' fill='none' stroke='%23F0997B' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -772,9 +912,11 @@ PAGE = r"""<!DOCTYPE html>
 
  <div id="v-today">
  <div class="wstrip" id="wstrip"></div>
+ <div class="brief" id="reviewcard" style="display:none;--bcolor:var(--accent)"></div>
  <div class="banner" id="banner"></div>
  <div class="brief" id="brief" style="display:none"></div>
  <div class="panel" id="weekpanel" style="display:none"></div>
+ <div class="panel" id="trendpanel" style="display:none"></div>
  </div>
 
  <div id="v-plan" style="display:none">
@@ -895,6 +1037,8 @@ async function load(force){
   jget('/api/weather').then(j=>{S.weather=j;render();}).catch(()=>{});
   jget('/api/fitness').then(j=>{S.fit=j;render();}).catch(()=>{});
   jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{});
+  jget('/api/trends').then(j=>{S.trends=j;render();}).catch(()=>{});
+  jget('/api/review').then(j=>{S.review=j.review;render();}).catch(()=>{});
  }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
 }
 function nav(d){S.month+=d;render();}
@@ -935,7 +1079,9 @@ function render(){
  document.getElementById('wkmi').textContent=
    Math.round(ranWk)+(planWk?' / '+Math.round(planWk):'');
  renderStrip(today);
+ renderReview();
  renderBrief(today);
+ renderTrends();
  renderPlanTab(today);
  renderWeek(today);
  renderChart();
@@ -1097,6 +1243,48 @@ function stripTap(ds){
  S.selDate=(S.selDate===ds)?null:ds;   // tap again to return to today
  render();
 }
+function renderReview(){
+ const el=document.getElementById('reviewcard'),r=S.review;
+ if(!r){el.style.display='none';return;}
+ el.innerHTML='<div class="top"><div style="flex:1;min-width:0">'+
+  '<b>Week '+r.week+' in review</b>'+
+  '<div class="sub">'+r.mi.toFixed(1)+' of '+Math.round(r.planned||0)+' mi · '+
+  r.runs+'/'+r.plannedRuns+' runs'+(r.judged?' · on target '+r.onTarget+' of '+r.judged:'')+
+  (r.vdot?' · VDOT '+r.vdot:'')+'</div>'+
+  '<div class="sub" style="color:var(--accent)">'+r.line+'</div></div></div>';
+ el.style.display='block';
+}
+
+function sparkSvg(vals,color,goodDown){
+ if(!vals||vals.length<3)return'';
+ const v0=Math.min(...vals),v1=Math.max(...vals),sp=(v1-v0)||1,W=300,H=30;
+ const pts=vals.map((v,i)=>((i/(vals.length-1))*W).toFixed(1)+','+
+   (H-3-((v-v0)/sp)*(H-6)).toFixed(1)).join(' ');
+ return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:30px">'+
+  '<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="2"/></svg>';
+}
+function renderTrends(){
+ const el=document.getElementById('trendpanel'),t=S.trends;
+ if(!t||((t.rhr||[]).length<5&&(t.easy||[]).length<2)){if(el)el.style.display='none';return;}
+ let h='<h3>Trends</h3>';
+ if((t.rhr||[]).length>=5){
+  const vs=t.rhr.map(x=>x.v),last=vs[vs.length-1],first=vs[0],d=last-first;
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px">'+
+   '<span style="color:var(--dim);font-size:13px">Resting HR · 30d</span>'+
+   '<span><b>'+last+'</b> <span style="font-size:11.5px;color:'+(d<=0?'var(--good)':'var(--tempo)')+'">'+
+   (d>0?'▲':'▼')+Math.abs(d)+'</span></span></div>'+sparkSvg(vs,'#3ec6c0');
+ }
+ if((t.easy||[]).length>=2){
+  const vs=t.easy.map(x=>x.v),last=vs[vs.length-1],d=last-vs[0];
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px">'+
+   '<span style="color:var(--dim);font-size:13px">Easy pace · weekly median</span>'+
+   '<span><b>'+fmtPace(last)+'</b> <span style="font-size:11.5px;color:'+(d<=0?'var(--good)':'var(--tempo)')+'">'+
+   (d>0?'▲':'▼')+fmtPace(Math.abs(d))+'</span></span></div>'+sparkSvg(vs,'#5DCAA5');
+ }
+ h+='<div style="color:var(--faint);font-size:11px;margin-top:6px">RHR down = adapting · easy pace down at the same effort = fitness</div>';
+ el.innerHTML=h;el.style.display='block';
+}
+
 function estRange(title){
  const mi=S.plan.planMiles[title];if(!mi)return'';
  const t=S.plan.planTargets[title];
@@ -1852,10 +2040,22 @@ load(false);
 
 # ------------------------------------------------------------------ notify
 
-def cmd_notify():
-    """One-shot macOS notification: today's workout + readiness, plus an
-    annotation nudge if today's run isn't logged yet. Schedule it with
-    ./lan.sh notify-on (7:30am briefing + 6:30pm nudge)."""
+def cmd_notify(weekly=False):
+    """One-shot notification: daily briefing/nudge, or --weekly for the
+    Sunday week-in-review. Scheduled by ./lan.sh notify-on."""
+    if weekly:
+        rev = build_week_review()
+        if rev:
+            msg = ("Week %d: %.1f of %.0f mi · %d/%d runs · on target %d×"
+                   % (rev["week"], rev["mi"], rev["planned"] or 0,
+                      rev["runs"], rev["plannedRuns"], rev["onTarget"]))
+            if rev.get("vdot"):
+                msg += " · VDOT %.1f" % rev["vdot"]
+            msg += " — " + rev["line"]
+        else:
+            msg = "Tune-up phase — weekly reviews start with week 1."
+        _push(msg)
+        return
     today = date.today().isoformat()
     items = [i for i in fetch_schedule() if i["date"] == today]
     if items:
@@ -1966,10 +2166,12 @@ def main():
     ap.add_argument("--port", type=int, default=PORT)
     ap.add_argument("--no-browser", action="store_true",
                     help="don't auto-open the dashboard")
+    ap.add_argument("--weekly", action="store_true",
+                    help="with notify: send the week-in-review")
     args = ap.parse_args()
 
     if args.command == "notify":
-        cmd_notify()
+        cmd_notify(weekly=args.weekly)
         return
     host = "0.0.0.0" if args.lan else "127.0.0.1"
     server = ThreadingHTTPServer((host, args.port), Handler)

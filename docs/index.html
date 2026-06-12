@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>timely — run on time</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101418'/%3E%3Cpath d='M20 20 L33 32 L20 44' fill='none' stroke='%235DCAA5' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 24 L46 32 L36 40' fill='none' stroke='%23F0997B' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -220,9 +221,11 @@
 
  <div id="v-today">
  <div class="wstrip" id="wstrip"></div>
+ <div class="brief" id="reviewcard" style="display:none;--bcolor:var(--accent)"></div>
  <div class="banner" id="banner"></div>
  <div class="brief" id="brief" style="display:none"></div>
  <div class="panel" id="weekpanel" style="display:none"></div>
+ <div class="panel" id="trendpanel" style="display:none"></div>
  </div>
 
  <div id="v-plan" style="display:none">
@@ -348,6 +351,14 @@
   if(u.startsWith('/api/move')){const b=JSON.parse(opts.body);
    const it=D.data.schedule.find(i=>String(i.scheduleId)===String(b.scheduleId));
    if(it)it.date=b.date;resp={ok:true};}
+  else if(u.startsWith('/api/trends')){
+   const rhr=[],easy=[];
+   for(let i=0;i<28;i++)rhr.push({d:'d'+i,v:Math.round(52-i*0.12+Math.sin(i*0.8)*1.6)});
+   for(let w=1;w<=5;w++)easy.push({w:w,v:Math.round(600-w*7)});
+   resp={rhr:rhr,easy:easy};}
+  else if(u.startsWith('/api/review')){resp={review:{week:5,mi:34.8,planned:36,runs:5,
+   plannedRuns:5,onTarget:3,judged:3,vdot:49.1,
+   line:'textbook week — the recovery is earned'}};}
   else if(u.startsWith('/api/gear')&&opts&&opts.method!=='GET'&&opts.body){resp={ok:true};}
   else if(u.startsWith('/api/gear')){resp={gear:[
    {key:'pegasus 41',display:'Pegasus 41',mi:318,runs:21,last:'2026-07-22',threshold:400,retired:false},
@@ -454,6 +465,8 @@ async function load(force){
   jget('/api/weather').then(j=>{S.weather=j;render();}).catch(()=>{});
   jget('/api/fitness').then(j=>{S.fit=j;render();}).catch(()=>{});
   jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{});
+  jget('/api/trends').then(j=>{S.trends=j;render();}).catch(()=>{});
+  jget('/api/review').then(j=>{S.review=j.review;render();}).catch(()=>{});
  }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
 }
 function nav(d){S.month+=d;render();}
@@ -494,7 +507,9 @@ function render(){
  document.getElementById('wkmi').textContent=
    Math.round(ranWk)+(planWk?' / '+Math.round(planWk):'');
  renderStrip(today);
+ renderReview();
  renderBrief(today);
+ renderTrends();
  renderPlanTab(today);
  renderWeek(today);
  renderChart();
@@ -656,6 +671,48 @@ function stripTap(ds){
  S.selDate=(S.selDate===ds)?null:ds;   // tap again to return to today
  render();
 }
+function renderReview(){
+ const el=document.getElementById('reviewcard'),r=S.review;
+ if(!r){el.style.display='none';return;}
+ el.innerHTML='<div class="top"><div style="flex:1;min-width:0">'+
+  '<b>Week '+r.week+' in review</b>'+
+  '<div class="sub">'+r.mi.toFixed(1)+' of '+Math.round(r.planned||0)+' mi · '+
+  r.runs+'/'+r.plannedRuns+' runs'+(r.judged?' · on target '+r.onTarget+' of '+r.judged:'')+
+  (r.vdot?' · VDOT '+r.vdot:'')+'</div>'+
+  '<div class="sub" style="color:var(--accent)">'+r.line+'</div></div></div>';
+ el.style.display='block';
+}
+
+function sparkSvg(vals,color,goodDown){
+ if(!vals||vals.length<3)return'';
+ const v0=Math.min(...vals),v1=Math.max(...vals),sp=(v1-v0)||1,W=300,H=30;
+ const pts=vals.map((v,i)=>((i/(vals.length-1))*W).toFixed(1)+','+
+   (H-3-((v-v0)/sp)*(H-6)).toFixed(1)).join(' ');
+ return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:30px">'+
+  '<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="2"/></svg>';
+}
+function renderTrends(){
+ const el=document.getElementById('trendpanel'),t=S.trends;
+ if(!t||((t.rhr||[]).length<5&&(t.easy||[]).length<2)){if(el)el.style.display='none';return;}
+ let h='<h3>Trends</h3>';
+ if((t.rhr||[]).length>=5){
+  const vs=t.rhr.map(x=>x.v),last=vs[vs.length-1],first=vs[0],d=last-first;
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px">'+
+   '<span style="color:var(--dim);font-size:13px">Resting HR · 30d</span>'+
+   '<span><b>'+last+'</b> <span style="font-size:11.5px;color:'+(d<=0?'var(--good)':'var(--tempo)')+'">'+
+   (d>0?'▲':'▼')+Math.abs(d)+'</span></span></div>'+sparkSvg(vs,'#3ec6c0');
+ }
+ if((t.easy||[]).length>=2){
+  const vs=t.easy.map(x=>x.v),last=vs[vs.length-1],d=last-vs[0];
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px">'+
+   '<span style="color:var(--dim);font-size:13px">Easy pace · weekly median</span>'+
+   '<span><b>'+fmtPace(last)+'</b> <span style="font-size:11.5px;color:'+(d<=0?'var(--good)':'var(--tempo)')+'">'+
+   (d>0?'▲':'▼')+fmtPace(Math.abs(d))+'</span></span></div>'+sparkSvg(vs,'#5DCAA5');
+ }
+ h+='<div style="color:var(--faint);font-size:11px;margin-top:6px">RHR down = adapting · easy pace down at the same effort = fitness</div>';
+ el.innerHTML=h;el.style.display='block';
+}
+
 function estRange(title){
  const mi=S.plan.planMiles[title];if(!mi)return'';
  const t=S.plan.planTargets[title];

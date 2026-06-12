@@ -99,11 +99,28 @@ case "${1:-status}" in
 </dict></plist>
 EOF
     launchctl bootstrap "gui/$(id -u)" "$NPLIST"
-    echo "✅ daily notifications on: 7:30am briefing, 6:30pm log-your-run nudge."
+    WPLIST="$HOME/Library/LaunchAgents/$LABEL.weekly.plist"
+    launchctl bootout "gui/$(id -u)/$LABEL.weekly" 2>/dev/null || true
+    cat > "$WPLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$LABEL.weekly</string>
+  <key>ProgramArguments</key>
+  <array><string>$PY</string><string>coach.py</string><string>notify</string><string>--weekly</string></array>
+  <key>WorkingDirectory</key><string>$APPDIR</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Weekday</key><integer>0</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
+</dict></plist>
+EOF
+    launchctl bootstrap "gui/$(id -u)" "$WPLIST"
+    echo "✅ notifications on: 7:30am briefing, 6:30pm nudge, Sunday 6pm week-in-review."
     ;;
   notify-off)
     launchctl bootout "gui/$(id -u)/$LABEL.notify" 2>/dev/null || true
-    rm -f "$HOME/Library/LaunchAgents/$LABEL.notify.plist"
+    launchctl bootout "gui/$(id -u)/$LABEL.weekly" 2>/dev/null || true
+    rm -f "$HOME/Library/LaunchAgents/$LABEL.notify.plist" "$HOME/Library/LaunchAgents/$LABEL.weekly.plist"
     echo "notifications off."
     ;;
   restart)

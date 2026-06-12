@@ -132,6 +132,14 @@ SHIM = """const DEMO=%s;
   if(u.startsWith('/api/move')){const b=JSON.parse(opts.body);
    const it=D.data.schedule.find(i=>String(i.scheduleId)===String(b.scheduleId));
    if(it)it.date=b.date;resp={ok:true};}
+  else if(u.startsWith('/api/trends')){
+   const rhr=[],easy=[];
+   for(let i=0;i<28;i++)rhr.push({d:'d'+i,v:Math.round(52-i*0.12+Math.sin(i*0.8)*1.6)});
+   for(let w=1;w<=5;w++)easy.push({w:w,v:Math.round(600-w*7)});
+   resp={rhr:rhr,easy:easy};}
+  else if(u.startsWith('/api/review')){resp={review:{week:5,mi:34.8,planned:36,runs:5,
+   plannedRuns:5,onTarget:3,judged:3,vdot:49.1,
+   line:'textbook week — the recovery is earned'}};}
   else if(u.startsWith('/api/gear')&&opts&&opts.method!=='GET'&&opts.body){resp={ok:true};}
   else if(u.startsWith('/api/gear')){resp={gear:[
    {key:'pegasus 41',display:'Pegasus 41',mi:318,runs:21,last:'2026-07-22',threshold:400,retired:false},
@@ -191,8 +199,10 @@ def main():
     marker = "<script>\nconst IS_MOBILE"
     assert marker in coach.PAGE, "coach.PAGE layout changed; update make_demo.py"
     html = coach.PAGE.replace(marker, shim + marker)
-    html = html.replace("<title>MCM Coach</title>",
-                        "<title>MCM Coach — interactive demo</title>")
+    html = html.replace('href="/apple-touch-icon.png"', 'href="apple-touch-icon.png"')
+    os.makedirs("docs", exist_ok=True)
+    with open(os.path.join("docs", "apple-touch-icon.png"), "wb") as f:
+        f.write(coach._icon_png())
     os.makedirs("docs", exist_ok=True)   # GitHub Pages serves from /docs
     out = os.path.join("docs", "index.html")
     with open(out, "w") as f:

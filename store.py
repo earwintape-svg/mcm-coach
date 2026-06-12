@@ -79,6 +79,11 @@ CREATE TABLE IF NOT EXISTS kv(
   v TEXT,
   updated_at REAL
 );
+CREATE TABLE IF NOT EXISTS weekly_reviews(
+  week INTEGER PRIMARY KEY,
+  json TEXT,
+  created_at REAL
+);
 CREATE TABLE IF NOT EXISTS gear(
   name TEXT PRIMARY KEY,
   display TEXT,
@@ -268,6 +273,21 @@ def set_gear(key, display=None, start_mi=None, threshold_mi=None, retired=None):
         c.execute("INSERT OR REPLACE INTO gear VALUES(?,?,?,?,?)",
                   (key, cur["display"], cur["start_mi"], cur["threshold_mi"],
                    cur["retired"]))
+
+
+def save_review(week, review):
+    init()
+    with _lock, _conn() as c:
+        c.execute("INSERT OR REPLACE INTO weekly_reviews VALUES(?,?,?)",
+                  (int(week), json.dumps(review), time.time()))
+
+
+def get_review(week):
+    init()
+    with _lock, _conn() as c:
+        row = c.execute("SELECT json FROM weekly_reviews WHERE week=?",
+                        (int(week),)).fetchone()
+    return json.loads(row["json"]) if row else None
 
 
 def set_kv(k, v):
