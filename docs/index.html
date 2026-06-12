@@ -139,7 +139,20 @@
  .lapbars{display:flex;align-items:flex-end;gap:3px;height:110px;margin:6px 0 2px;position:relative}
  .lapbars .b{flex:1;background:var(--good);border-radius:3px 3px 0 0;min-width:3px;opacity:.92;position:relative;z-index:1}
  .lapbars .tband{position:absolute;left:0;right:0;background:rgba(255,255,255,.14);border-radius:3px;z-index:0}
- .splitrow{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px}
+ .chartwrap{position:relative;touch-action:none;cursor:crosshair}
+ .chartwrap svg{display:block;margin-bottom:6px}
+ .ctip{position:absolute;background:#222b36;border:1px solid var(--line);border-radius:8px;
+  padding:5px 9px;font-size:11.5px;white-space:nowrap;pointer-events:none;display:none;
+  z-index:5;transform:translate(-50%,0)}
+ .selstats{background:var(--cell);border-radius:9px;padding:7px 11px;font-size:12.5px;
+  margin:2px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+ .splitrow.on{background:#1d2733;border-radius:8px}
+ .zrow{display:flex;align-items:center;gap:9px;font-size:11.5px;margin:4px 0}
+ .zrow .zl{width:84px;color:var(--dim);flex:none}
+ .zrow .zt{width:74px;text-align:right;color:var(--dim);flex:none}
+ .zrow .zbar{flex:1;background:var(--cell);border-radius:4px;height:9px}
+ .zrow .zbar i{display:block;height:9px;border-radius:4px}
+ .splitrow{display:flex;align-items:center;gap:8px;padding:3px 4px;font-size:12.5px;cursor:pointer}
  .splitrow .n{width:34px;color:var(--dim);flex:none;text-align:right}
  .splitrow .bar{height:23px;border-radius:6px;background:var(--strides);color:#06221f;font-weight:600;
   display:flex;align-items:center;padding:0 8px;font-size:12px;white-space:nowrap}
@@ -311,7 +324,7 @@
    }
   }
   // series + abstract riverside route
-  const N=150,d=[],pc=[],hr=[],rt=[];
+  const N=150,d=[],pc=[],hr=[],el=[],rt=[];
   let cum=0;const tot=laps.reduce((a,l)=>a+l.mi,0);
   for(let i=0;i<N;i++){
    const x=i/(N-1)*tot;d.push(Math.round(x*1000)/1000);
@@ -320,6 +333,7 @@
    pc.push(Math.round(lp.paceSec+Math.sin(i*1.7)*9+(rnd()-0.5)*8));
    hr.push(Math.round(Math.min(184,128+x/tot*22+ (620-lp.paceSec)*0.12+Math.sin(i*0.9)*3)));
    const t=i/(N-1);
+   el.push(Math.round(12+9*Math.sin(i*0.22)+t*14));
    rt.push([40.72+t*0.028+Math.sin(t*9)*0.0012,
             -74.012+Math.sin(t*3.1)*0.004+Math.cos(t*13)*0.0009]);
   }
@@ -327,7 +341,7 @@
     durSec:Math.round(r.mi*r.paceSec),paceSec:r.paceSec,
     avgHr:Math.round(hr.reduce((a,b)=>a+b,0)/hr.length),
     maxHr:Math.max.apply(null,hr),cad:157,elevFt:48},
-   laps:laps,series:{d:d,pace:pc,hr:hr},route:rt};
+   laps:laps,series:{d:d,pace:pc,hr:hr,elev:el},route:rt};
  };
  window.fetch=async function(u,opts){
   let resp;u=String(u);
@@ -1007,52 +1021,193 @@ async function openRun(aid,title){
 }
 function closeRun(){document.getElementById('rscrim').classList.remove('show');}
 
-function routeSvg(rt){
- if(!rt||rt.length<8)return'';
+/* ---- interactive run analysis engine (Strava-style scrub/select) ---- */
+let RS=null;
+const RW=520,RPAD=14;
+function paceCol(t){
+ t=Math.max(0,Math.min(1,t));
+ const a=[93,202,165],b=[240,153,123];
+ return 'rgb('+a.map((v,k)=>Math.round(v+(b[k]-v)*t)).join(',')+')';
+}
+function rx(i){return RPAD+(RS.d[i]/RS.d[RS.n-1])*(RW-2*RPAD);}
+
+function routeSvgX(rt){
+ if(!rt||rt.length<8){RS.rpts=null;return'';}
  const lats=rt.map(p=>p[0]),lons=rt.map(p=>p[1]);
  const la0=Math.min(...lats),la1=Math.max(...lats),lo0=Math.min(...lons),lo1=Math.max(...lons);
- const W=520,H=180,pad=12;
- const kx=Math.cos((la0+la1)/2*Math.PI/180);   // shrink longitude at latitude
- const spanX=(lo1-lo0)*kx||1e-9, spanY=(la1-la0)||1e-9;
- const sc=Math.min((W-2*pad)/spanX,(H-2*pad)/spanY);
- const ox=(W-spanX*sc)/2, oy=(H-spanY*sc)/2;
- const pt=p=>[(ox+((p[1]-lo0)*kx)*sc).toFixed(1),(oy+(la1-p[0])*sc).toFixed(1)];
- let dStr='M'+pt(rt[0]).join(' ');
- for(let i=1;i<rt.length;i++)dStr+=' L'+pt(rt[i]).join(' ');
- const a=pt(rt[0]),b=pt(rt[rt.length-1]);
- return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;background:var(--cell);border-radius:12px">'+
-  '<path d="'+dStr+'" fill="none" stroke="var(--strides)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity=".95"/>'+
-  '<circle cx="'+a[0]+'" cy="'+a[1]+'" r="5" fill="var(--good)"/>'+
-  '<circle cx="'+b[0]+'" cy="'+b[1]+'" r="5" fill="#fff"/></svg>';
+ const H=170,kx=Math.cos((la0+la1)/2*Math.PI/180);
+ const spanX=(lo1-lo0)*kx||1e-9,spanY=(la1-la0)||1e-9;
+ const sc=Math.min((RW-2*RPAD)/spanX,(H-2*RPAD)/spanY);
+ const ox=(RW-spanX*sc)/2,oy=(H-spanY*sc)/2;
+ const pts=rt.map(p=>[ox+((p[1]-lo0)*kx)*sc,oy+(la1-p[0])*sc]);
+ RS.rpts=pts;
+ // pace-colored segments: see where you surged and where you faded
+ const ps=(RS.pace||[]).filter(x=>x!=null).slice().sort((a,b)=>a-b);
+ const p10=ps[Math.floor(ps.length*0.1)]||0,p90=ps[Math.floor(ps.length*0.9)]||1;
+ const step=Math.max(1,Math.floor(pts.length/56));
+ let segs='';
+ for(let i=0;i<pts.length-1;i+=step){
+  const j=Math.min(pts.length-1,i+step);
+  const si=Math.round(i/(pts.length-1)*(RS.n-1));
+  const pv=RS.pace[si];
+  const col=(pv!=null&&p90>p10)?paceCol((pv-p10)/(p90-p10)):'#3ec6c0';
+  segs+='<polyline points="'+pts.slice(i,j+1).map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')+
+   '" fill="none" stroke="'+col+'" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>';
+ }
+ return '<svg viewBox="0 0 '+RW+' '+H+'" style="width:100%;background:var(--cell);border-radius:12px">'+segs+
+  '<polyline id="rsel" points="" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>'+
+  '<circle cx="'+pts[0][0].toFixed(1)+'" cy="'+pts[0][1].toFixed(1)+'" r="5" fill="var(--good)"/>'+
+  '<circle cx="'+pts[pts.length-1][0].toFixed(1)+'" cy="'+pts[pts.length-1][1].toFixed(1)+'" r="5" fill="#fff"/>'+
+  '<circle id="rdot" r="6.5" fill="#fff" stroke="#101418" stroke-width="2.5" style="display:none"/></svg>';
 }
 
-function lineSvg(d,vals,color,invert){
+function chartX(id,vals,H,color,invert){
  const pts=[];
- for(let i=0;i<d.length;i++)if(vals[i]!=null)pts.push([d[i],vals[i]]);
+ for(let i=0;i<RS.n;i++)if(vals[i]!=null)pts.push(i);
  if(pts.length<5)return'';
- const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
- const x1=Math.max(...xs),v0=Math.min(...ys),v1=Math.max(...ys);
- const W=520,H=90,sp=(v1-v0)||1;
- const path=pts.map((p,i)=>{
-  const x=(p[0]/x1)*W;
-  let y=(p[1]-v0)/sp; if(invert)y=1-y;
-  return (i?'L':'M')+x.toFixed(1)+' '+(H-8-y*(H-16)).toFixed(1);
+ const ys=pts.map(i=>vals[i]);
+ const v0=Math.min(...ys),v1=Math.max(...ys),sp=(v1-v0)||1;
+ const path=pts.map((i,k)=>{
+  let y=(vals[i]-v0)/sp;if(invert)y=1-y;
+  return (k?'L':'M')+rx(i).toFixed(1)+' '+(H-7-y*(H-14)).toFixed(1);
  }).join(' ');
- return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;background:var(--cell);border-radius:10px">'+
-  '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2"/></svg>';
+ return '<svg viewBox="0 0 '+RW+' '+H+'" style="width:100%;background:var(--cell);border-radius:10px">'+
+  '<rect id="sel-'+id+'" class="selr" x="0" y="0" width="0" height="'+H+'"/>'+
+  '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2"/>'+
+  '<line id="cur-'+id+'" y1="0" y2="'+H+'" x1="0" x2="0" stroke="#f0f3f6" stroke-width="1" opacity=".85" style="display:none"/></svg>';
+}
+
+function rngStats(a,b){
+ let ps=[],hs=[];
+ for(let i=a;i<=b;i++){if(RS.pace[i]!=null)ps.push(RS.pace[i]);if(RS.hr[i]!=null)hs.push(RS.hr[i]);}
+ return {mi:RS.d[b]-RS.d[a],
+  pace:ps.length?Math.round(ps.reduce((x,y)=>x+y,0)/ps.length):null,
+  hr:hs.length?Math.round(hs.reduce((x,y)=>x+y,0)/hs.length):null};
+}
+function setSel(a,b,lap){
+ if(a>b){const t=a;a=b;b=t;}
+ RS.sel=(RS.sel&&RS.sel[0]===a&&RS.sel[1]===b)?null:[a,b];
+ RS.selLap=RS.sel?lap:null;
+ drawSel();
+}
+function clearSel(){RS.sel=null;RS.selLap=null;drawSel();}
+function drawSel(){
+ const sel=RS.sel;
+ RS.charts.forEach(id=>{
+  const r=document.getElementById('sel-'+id);
+  if(r){r.setAttribute('x',sel?rx(sel[0]):0);r.setAttribute('width',sel?Math.max(2,rx(sel[1])-rx(sel[0])):0);}
+ });
+ const rl=document.getElementById('rsel');
+ if(rl&&RS.rpts){
+  rl.setAttribute('points',!sel?'':(function(){
+   const m=RS.rpts.length-1;
+   const a=Math.round(sel[0]/(RS.n-1)*m),b=Math.round(sel[1]/(RS.n-1)*m);
+   return RS.rpts.slice(a,b+1).map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');})());
+ }
+ document.querySelectorAll('.splitrow').forEach((el,i)=>el.classList.toggle('on',RS.selLap===i));
+ const st=document.getElementById('selstats');
+ if(!st)return;
+ if(sel){
+  const g=rngStats(sel[0],sel[1]);
+  st.innerHTML='<b>'+g.mi.toFixed(2)+' mi selected</b>'+
+   (g.pace?'<span>'+fmtPace(g.pace)+'/mi</span>':'')+
+   (g.hr?'<span>'+g.hr+' bpm</span>':'')+
+   '<button class="ghost" style="margin-left:auto;padding:0 6px" onclick="clearSel()">✕ clear</button>';
+ }else{
+  st.innerHTML='<span style="color:var(--dim)">Touch or hover the charts to scrub · tap a split to inspect it'+
+   (matchMedia('(pointer:fine)').matches?' · drag to select a stretch':'')+'</span>';
+ }
+}
+function selectLap(k){
+ let cum=0;
+ for(let i=0;i<k;i++)cum+=RS.laps[i].mi;
+ const end=cum+RS.laps[k].mi;
+ let a=0,b=RS.n-1;
+ for(let i=0;i<RS.n;i++){if(RS.d[i]<=cum)a=i;if(RS.d[i]<=end)b=i;}
+ setSel(a,b,k);
+}
+function updateScrub(i){
+ RS.charts.forEach(id=>{
+  const l=document.getElementById('cur-'+id);
+  if(l){l.style.display='';l.setAttribute('x1',rx(i));l.setAttribute('x2',rx(i));}
+ });
+ const dot=document.getElementById('rdot');
+ if(dot&&RS.rpts){
+  const p=RS.rpts[Math.round(i/(RS.n-1)*(RS.rpts.length-1))];
+  dot.style.display='';dot.setAttribute('cx',p[0].toFixed(1));dot.setAttribute('cy',p[1].toFixed(1));
+ }
+ const tip=document.getElementById('ctip');
+ if(tip){
+  tip.style.display='block';
+  tip.style.left=(rx(i)/RW*100)+'%';tip.style.top='2px';
+  tip.innerHTML='mi '+RS.d[i].toFixed(2)+
+   (RS.pace[i]!=null?' · <b>'+fmtPace(RS.pace[i])+'/mi</b>':'')+
+   (RS.hr[i]!=null?' · '+RS.hr[i]+' bpm':'')+
+   (RS.elev&&RS.elev[i]!=null?' · '+Math.round(RS.elev[i])+'′':'');
+ }
+}
+function hideScrub(){
+ RS.charts.forEach(id=>{const l=document.getElementById('cur-'+id);if(l)l.style.display='none';});
+ const dot=document.getElementById('rdot');if(dot)dot.style.display='none';
+ const tip=document.getElementById('ctip');if(tip)tip.style.display='none';
+}
+function initRunUX(){
+ const box=document.getElementById('chartsbox');
+ if(!box||!RS||RS.n<5)return;
+ const fracIdx=e=>{
+  const r=box.getBoundingClientRect();
+  const fx=(e.clientX-r.left)/r.width*RW;
+  const frac=(fx-RPAD)/(RW-2*RPAD);
+  return Math.max(0,Math.min(RS.n-1,Math.round(frac*(RS.n-1))));
+ };
+ box.addEventListener('pointerdown',e=>{RS.drag={x:e.clientX,i:fracIdx(e),t:e.pointerType};});
+ box.addEventListener('pointermove',e=>{
+  const i=fracIdx(e);
+  if(RS.drag&&RS.drag.t==='mouse'&&e.buttons&&Math.abs(e.clientX-RS.drag.x)>10)setSel(RS.drag.i,i,null);
+  updateScrub(i);
+ });
+ box.addEventListener('pointerup',()=>{RS.drag=null;});
+ box.addEventListener('pointerleave',()=>{RS.drag=null;hideScrub();});
+ drawSel();
+}
+function zonesHtml(){
+ const hs=(RS.hr||[]).filter(x=>x!=null);
+ if(hs.length<10)return'';
+ const zmax=Math.max(RS.maxHr||0,Math.max(...hs),185);
+ const th=[0,0.6,0.7,0.8,0.9].map(p=>Math.round(p*zmax));
+ const cols=['#5b6671','#3ec6c0','#34c77b','#f5a623','#ff6b6b'];
+ const names=['Recovery','Easy','Aerobic','Threshold','Max'];
+ let counts=[0,0,0,0,0];
+ hs.forEach(v=>{let z=0;for(let k=4;k>=0;k--){if(v>=th[k]){z=k;break;}}counts[z]++;});
+ let h='<h4>Heart rate zones</h4>';
+ counts.forEach((c,k)=>{
+  const pct=c/hs.length;
+  const secs=Math.round(pct*RS.durSec);
+  h+='<div class="zrow"><span class="zl">Z'+(k+1)+' '+names[k]+'</span>'+
+   '<div class="zbar"><i style="width:'+(pct*100).toFixed(0)+'%;background:'+cols[k]+'"></i></div>'+
+   '<span class="zt">'+(pct*100).toFixed(0)+'% · '+fmtDur(secs)+'</span></div>';
+ });
+ return h;
 }
 
 function renderRun(j,target,title){
  const s=j.summary||{},laps=j.laps||[],ser=j.series||{};
+ RS={d:ser.d||[],pace:ser.pace||[],hr:ser.hr||[],elev:ser.elev||[],
+     laps:laps,n:(ser.d||[]).length,durSec:s.durSec||0,maxHr:s.maxHr,
+     sel:null,selLap:null,charts:[],rpts:null,drag:null};
  let h='<h3>'+(title||s.name)+'</h3><p>'+s.name+'</p>';
- h+=routeSvg(j.route);
+ h+=routeSvgX(j.route);
+ const fastLaps=laps.filter(l=>l.mi>=0.9).map(l=>l.paceSec);
  h+='<div class="statgrid">'+
   '<div><b>'+(s.mi!=null?s.mi.toFixed(2):'—')+'</b><span>miles</span></div>'+
   '<div><b>'+(s.durSec?fmtDur(s.durSec):'—')+'</b><span>time</span></div>'+
   '<div><b>'+(s.paceSec?fmtPace(s.paceSec):'—')+'</b><span>avg /mi</span></div>'+
   '<div><b>'+(s.avgHr||'—')+'</b><span>avg hr</span></div>'+
+  '<div><b>'+(s.maxHr||'—')+'</b><span>max hr</span></div>'+
   '<div><b>'+(s.cad?Math.round(s.cad)+'':'—')+'</b><span>cadence</span></div>'+
-  '<div><b>'+(s.elevFt!=null?s.elevFt+'′':'—')+'</b><span>elev gain</span></div></div>';
+  '<div><b>'+(s.elevFt!=null?s.elevFt+'′':'—')+'</b><span>elev gain</span></div>'+
+  '<div><b>'+(fastLaps.length?fmtPace(Math.min.apply(null,fastLaps)):'—')+'</b><span>best split</span></div>'+
+  '<div><b>'+(RS.n?RS.d[RS.n-1].toFixed(1):'—')+'</b><span>gps mi</span></div></div>';
  if(laps.length>1){
   // laps vs target: bar height ∝ speed, white band = target pace range
   const v=laps.map(l=>1/l.paceSec);
@@ -1068,7 +1223,7 @@ function renderRun(j,target,title){
   laps.forEach(l=>{h+='<div class="b" style="height:'+Math.max(4,hpc(l.paceSec))+'%" title="'+
     l.mi.toFixed(2)+' mi @ '+fmtPace(l.paceSec)+'/mi"></div>';});
   h+='</div>';
-  h+='<h4>Splits</h4>';
+  h+='<h4>Splits — tap one to inspect it</h4>';
   const fastest=Math.min(...laps.map(l=>l.paceSec));
   laps.forEach((l,i)=>{
    const w=35+55*(fastest/l.paceSec);
@@ -1076,13 +1231,19 @@ function renderRun(j,target,title){
    if(i>0){const dlt=laps[i-1].paceSec-l.paceSec;
     pm='<span class="pm" style="color:'+(dlt>=0?'var(--good)':'var(--hard)')+'">'+
      (dlt>=0?'+':'−')+fmtPace(Math.abs(dlt))+'</span>';}
-   h+='<div class="splitrow"><span class="n">'+(l.mi>=0.95&&l.mi<=1.05?(i+1):l.mi.toFixed(2))+
+   h+='<div class="splitrow" onclick="selectLap('+i+')"><span class="n">'+
+    (l.mi>=0.95&&l.mi<=1.05?(i+1):l.mi.toFixed(2))+
     '</span><div class="bar" style="width:'+w.toFixed(0)+'%">'+fmtPace(l.paceSec)+'/mi</div>'+pm+'</div>';
   });
  }
- if(ser.d&&ser.d.length){
-  if(ser.pace&&ser.pace.some(x=>x!=null)){h+='<h4>Pace</h4>'+lineSvg(ser.d,ser.pace,'#3ec6c0',true);}
-  if(ser.hr&&ser.hr.some(x=>x!=null)){h+='<h4>Heart rate</h4>'+lineSvg(ser.d,ser.hr,'#ff6b6b',false);}
+ if(RS.n>=5){
+  h+='<h4>Analysis</h4><div class="selstats" id="selstats"></div>'+
+   '<div class="chartwrap" id="chartsbox">';
+  if(RS.pace.some(x=>x!=null)){h+=chartX('pc',RS.pace,86,'#3ec6c0',true);RS.charts.push('pc');}
+  if(RS.hr.some(x=>x!=null)){h+=chartX('hr',RS.hr,70,'#ff6b6b',false);RS.charts.push('hr');}
+  if(RS.elev&&RS.elev.some(x=>x!=null)){h+=chartX('el',RS.elev,52,'#5b8db8',false);RS.charts.push('el');}
+  h+='<div class="ctip" id="ctip"></div></div>';
+  h+=zonesHtml();
  }
  const ann=(S.ann||{})[String(CUR_AID)]||{};
  h+='<h4>How did it feel?</h4>'+
@@ -1110,6 +1271,7 @@ function renderRun(j,target,title){
  h+='<div class="row"><button onclick="closeRun()">Close</button>'+
   '<button class="primary" onclick="saveAnn(true)">Save & done</button></div>';
  document.getElementById('rmodal').innerHTML=h;
+ initRunUX();
 }
 function pickRpe(n){
  CUR_RPE=(CUR_RPE===n)?null:n;

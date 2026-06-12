@@ -108,7 +108,7 @@ SHIM = """const DEMO=%s;
    }
   }
   // series + abstract riverside route
-  const N=150,d=[],pc=[],hr=[],rt=[];
+  const N=150,d=[],pc=[],hr=[],el=[],rt=[];
   let cum=0;const tot=laps.reduce((a,l)=>a+l.mi,0);
   for(let i=0;i<N;i++){
    const x=i/(N-1)*tot;d.push(Math.round(x*1000)/1000);
@@ -117,6 +117,7 @@ SHIM = """const DEMO=%s;
    pc.push(Math.round(lp.paceSec+Math.sin(i*1.7)*9+(rnd()-0.5)*8));
    hr.push(Math.round(Math.min(184,128+x/tot*22+ (620-lp.paceSec)*0.12+Math.sin(i*0.9)*3)));
    const t=i/(N-1);
+   el.push(Math.round(12+9*Math.sin(i*0.22)+t*14));
    rt.push([40.72+t*0.028+Math.sin(t*9)*0.0012,
             -74.012+Math.sin(t*3.1)*0.004+Math.cos(t*13)*0.0009]);
   }
@@ -124,7 +125,7 @@ SHIM = """const DEMO=%s;
     durSec:Math.round(r.mi*r.paceSec),paceSec:r.paceSec,
     avgHr:Math.round(hr.reduce((a,b)=>a+b,0)/hr.length),
     maxHr:Math.max.apply(null,hr),cad:157,elevFt:48},
-   laps:laps,series:{d:d,pace:pc,hr:hr},route:rt};
+   laps:laps,series:{d:d,pace:pc,hr:hr,elev:el},route:rt};
  };
  window.fetch=async function(u,opts){
   let resp;u=String(u);
