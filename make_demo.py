@@ -131,6 +131,10 @@ SHIM = """const DEMO=%s;
   if(u.startsWith('/api/move')){const b=JSON.parse(opts.body);
    const it=D.data.schedule.find(i=>String(i.scheduleId)===String(b.scheduleId));
    if(it)it.date=b.date;resp={ok:true};}
+  else if(u.startsWith('/api/gear')&&opts&&opts.method!=='GET'&&opts.body){resp={ok:true};}
+  else if(u.startsWith('/api/gear')){resp={gear:[
+   {key:'pegasus 41',display:'Pegasus 41',mi:318,runs:21,last:'2026-07-22',threshold:400,retired:false},
+   {key:'endorphin pro',display:'Endorphin Pro',mi:64,runs:4,last:'2026-07-19',threshold:300,retired:false}]};}
   else if(u.startsWith('/api/annotate')){const b=JSON.parse(opts.body);
    D.actuals.ann=D.actuals.ann||{};
    D.actuals.ann[String(b.activityId)]={rpe:b.rpe,note:b.note,shoes:b.shoes};resp={ok:true};}

@@ -485,6 +485,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(fetch_weather())
             elif route.startswith("/api/fitness"):
                 self._json(fetch_fitness())
+            elif route.startswith("/api/gear"):
+                self._json({"gear": store.gear_summary()})
             elif route.startswith("/api/run/"):
                 aid = route.split("/api/run/")[1]
                 if not aid.isdigit():           # activity ids are numeric
@@ -522,6 +524,12 @@ class Handler(BaseHTTPRequestHandler):
                 date.fromisoformat(str(req["date"]))
                 store.save_external(str(req["source"]), str(req["date"]),
                                     req.get("metrics") or {})
+                self._json({"ok": True})
+            elif self.path == "/api/gear":
+                store.set_gear(str(req["key"]), display=req.get("display"),
+                               start_mi=req.get("startMi"),
+                               threshold_mi=req.get("thresholdMi"),
+                               retired=req.get("retired"))
                 self._json({"ok": True})
             elif self.path == "/api/annotate":
                 store.set_annotation(str(req["activityId"])[:32],
@@ -870,6 +878,7 @@ async function load(force){
   jget('/api/wellness').then(j=>{S.wellness=j;render();}).catch(()=>{});
   jget('/api/weather').then(j=>{S.weather=j;render();}).catch(()=>{});
   jget('/api/fitness').then(j=>{S.fit=j;render();}).catch(()=>{});
+  jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{});
  }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
 }
 function nav(d){S.month+=d;render();}
@@ -903,8 +912,12 @@ function render(){
    Math.max(0,Math.round((parse(S.plan.race)-parse(today))/DAY));
  document.getElementById('nsched').textContent=S.schedule.length;
  const wk=Math.floor((parse(today)-parse(S.plan.start))/DAY/7)+1;
- const ran=S.weeklyActual[wk]||0, plan=S.plan.plannedWeekly[wk];
- document.getElementById('wkmi').textContent=plan?(ran.toFixed(0)+' / '+Math.round(plan)):'—';
+ // miles this week = actual runs since Monday, independent of plan weeks
+ const mon=new Date(parse(today));mon.setDate(mon.getDate()-((mon.getDay()+6)%7));
+ const ranWk=S.runs.filter(r=>r.date>=fmt(mon)&&r.date<=today).reduce((a,r)=>a+r.mi,0);
+ const planWk=S.plan.plannedWeekly[wk];
+ document.getElementById('wkmi').textContent=
+   Math.round(ranWk)+(planWk?' / '+Math.round(planWk):'');
  renderStrip(today);
  renderBrief(today);
  renderPlanTab(today);
@@ -956,9 +969,16 @@ function renderPlanList(today){
  el.innerHTML=h||'<p style="color:var(--dim)">No scheduled workouts — run upload first.</p>';
 }
 
+function setActFilter(f){S.actFilter=f;render();}
+function runKind(r){
+ const it=S.schedule.find(i=>i.date===r.date);
+ if(!it)return 'Easy';
+ if(/mi LR|MP Finish/.test(it.title))return 'Long';
+ return isHard(it.title)?'Quality':'Easy';
+}
 function renderActs(){
  const el=document.getElementById('actpanel');
- const runs=S.runs.slice().sort((a,b)=>b.date.localeCompare(a.date));
+ let runs=S.runs.slice().sort((a,b)=>b.date.localeCompare(a.date));
  if(!runs.length){
   el.innerHTML='<h3>Activities</h3><p style="color:var(--dim)">Completed runs land here automatically once training starts — tap any for the full breakdown.</p>';
   return;
@@ -966,6 +986,41 @@ function renderActs(){
  const tot=runs.reduce((a,r)=>a+r.mi,0);
  let h='<h3>Activities <span style="color:var(--dim);font-weight:400">— '+
    runs.length+' runs · '+tot.toFixed(0)+' mi</span></h3>';
+ // insight chips: 30-day volume, on-target rate, average RPE
+ const cutoff=fmt(new Date(parse(S.plan.today).getTime()-30*DAY));
+ const r30=runs.filter(r=>r.date>=cutoff);
+ let hit=0,judged=0;
+ r30.forEach(r=>{const it=S.schedule.find(i=>i.date===r.date);
+  if(!it)return;const a=assess(it);if(!a)return;
+  judged++;if(a.distOk&&a.paceOk!==false)hit++;});
+ const rpes=Object.values(S.ann||{}).map(a=>a.rpe).filter(Boolean);
+ h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin:4px 0 10px">'+
+  '<div style="background:var(--cell);border-radius:10px;padding:8px 10px;text-align:center"><b style="font-size:17px">'+
+   r30.reduce((a,r)=>a+r.mi,0).toFixed(0)+'</b><div style="color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">mi · 30d</div></div>'+
+  '<div style="background:var(--cell);border-radius:10px;padding:8px 10px;text-align:center"><b style="font-size:17px">'+
+   (judged?Math.round(hit/judged*100)+'%':'—')+'</b><div style="color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">on target</div></div>'+
+  '<div style="background:var(--cell);border-radius:10px;padding:8px 10px;text-align:center"><b style="font-size:17px">'+
+   (rpes.length?(rpes.reduce((a,b)=>a+b,0)/rpes.length).toFixed(1):'—')+'</b><div style="color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">avg RPE</div></div></div>';
+ // gear
+ const activeGear=(S.gear||[]).filter(g=>!g.retired);
+ if(activeGear.length){
+  h+='<h3 style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin:14px 0 6px">Gear</h3>';
+  activeGear.forEach(g=>{
+   const pct=Math.min(100,g.mi/(g.threshold+100)*100);
+   const col=g.mi>=g.threshold+50?'var(--hard)':(g.mi>=g.threshold-50?'var(--tempo)':'var(--good)');
+   h+='<div onclick="gearEdit(\''+g.key.replace(/'/g,'')+'\')" style="padding:6px 0;cursor:pointer">'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px"><b>'+g.display+'</b>'+
+    '<span style="color:'+col+'">'+g.mi.toFixed(0)+' mi'+(g.mi>=g.threshold?' · time to retire?':'')+'</span></div>'+
+    '<div style="background:var(--cell);height:5px;border-radius:3px;margin-top:4px">'+
+    '<div style="width:'+pct.toFixed(0)+'%;height:5px;border-radius:3px;background:'+col+'"></div></div></div>';
+  });
+ }
+ // filters
+ h+='<div style="display:flex;gap:6px;margin:12px 0 2px">'+
+  ['All','Quality','Easy','Long'].map(f=>'<button onclick="setActFilter(\''+f+'\')" '+
+   ((S.actFilter||'All')===f?'class="primary" ':'')+'style="padding:5px 13px;font-size:12px">'+f+'</button>').join('')+'</div>';
+ const flt=S.actFilter||'All';
+ if(flt!=='All')runs=runs.filter(r=>runKind(r)===flt);
  if(S.fit&&S.fit.current){
   const gap=S.fit.goalGap,onTrack=gap<=0;
   h+='<div style="background:var(--cell);border-radius:12px;padding:11px 14px;margin:4px 0 10px">'+
@@ -1302,6 +1357,11 @@ function openDetail(sid){
  }
  const big=runsOn(it.date).filter(r=>r.activityId).sort((x,y)=>y.mi-x.mi)[0];
  const missed=it.date<S.plan.today&&!big;
+ const annD=big?((S.ann||{})[String(big.activityId)]||{}):{};
+ if(annD.rpe||annD.note||annD.shoes){
+  h+='<br><b>Your log:</b> '+[annD.rpe?'RPE '+annD.rpe:null,annD.shoes||null].filter(Boolean).join(' · ')+
+   (annD.note?'<br><span style="color:var(--faint)">“'+annD.note+'”</span>':'');
+ }
  h+='</div><div class="row">'+
   (big?'<button onclick="closeDetail();openRun(\''+big.activityId+'\',\''+it.title.replace(/'/g,'')+'\')">View run ▸</button>':'')+
   (missed?'<button class="primary" onclick="openReplan('+it.scheduleId+')">Replan ▸</button>':'')+
@@ -1474,11 +1534,20 @@ function renderRun(j,target,title){
   '<input id="annNote" placeholder="Notes — how it went, what hurt, what worked" value="'+
    (ann.note||'').replace(/"/g,'&quot;')+'" style="width:100%;background:var(--cell);'+
    'border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:10px 11px;font-size:16px;margin-bottom:8px">'+
-  '<input id="annShoes" placeholder="Shoes" value="'+(ann.shoes||'').replace(/"/g,'&quot;')+
-   '" style="width:100%;background:var(--cell);border:1px solid var(--line);color:var(--tx);'+
-   'border-radius:9px;padding:10px 11px;font-size:16px">';
- h+='<div class="row"><button onclick="saveAnn()">Save log</button>'+
-  '<button class="primary" onclick="closeRun()">Done</button></div>';
+  (function(){
+   const known=(S.gear||[]).filter(g=>!g.retired).map(g=>g.display);
+   if(ann.shoes&&known.indexOf(ann.shoes)<0)known.unshift(ann.shoes);
+   let s='<select id="annShoesSel" onchange="shoesSel(this)" style="width:100%;background:var(--cell);'+
+    'border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:10px 11px;font-size:16px;margin-bottom:8px">'+
+    '<option value="">Shoes — none logged</option>';
+   known.forEach(k=>{s+='<option'+(ann.shoes===k?' selected':'')+'>'+k+'</option>';});
+   s+='<option value="__new">+ New shoe…</option></select>'+
+    '<input id="annShoesNew" placeholder="New shoe name (e.g. Pegasus 41)" style="display:none;width:100%;'+
+    'background:var(--cell);border:1px solid var(--line);color:var(--tx);border-radius:9px;'+
+    'padding:10px 11px;font-size:16px">';
+   return s;})();
+ h+='<div class="row"><button onclick="closeRun()">Close</button>'+
+  '<button class="primary" onclick="saveAnn(true)">Save & done</button></div>';
  document.getElementById('rmodal').innerHTML=h;
 }
 function pickRpe(n){
@@ -1487,13 +1556,51 @@ function pickRpe(n){
   if(!b)return;
   b.style.cssText='flex:1'+(CUR_RPE===k?';background:var(--accent);color:var(--oninvert);border-color:var(--accent)':'');});
 }
-async function saveAnn(){
- const note=document.getElementById('annNote').value,shoes=document.getElementById('annShoes').value;
+function shoesSel(s){
+ document.getElementById('annShoesNew').style.display=s.value==='__new'?'':'none';
+ if(s.value==='__new')document.getElementById('annShoesNew').focus();
+}
+async function saveAnn(close){
+ const note=document.getElementById('annNote').value;
+ const sel=document.getElementById('annShoesSel');
+ let shoes=sel?sel.value:'';
+ if(shoes==='__new')shoes=document.getElementById('annShoesNew').value.trim();
  try{
   await jpost('/api/annotate',{activityId:CUR_AID,rpe:CUR_RPE,note:note,shoes:shoes});
   S.ann=S.ann||{};S.ann[String(CUR_AID)]={rpe:CUR_RPE,note:note,shoes:shoes};
-  toast('Logged — this is your data now');render();
+  toast('Logged — this is your data now');
+  if(close)closeRun();
+  jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{render();});
  }catch(e){toast('Save failed: '+e.message,{err:1});}
+}
+
+function gearEdit(key){
+ const g=(S.gear||[]).find(x=>x.key===key);
+ if(!g)return;
+ let h='<h3>'+g.display+'</h3><p>'+g.mi.toFixed(0)+' mi across '+g.runs+' runs'+
+  (g.last?' · last used '+g.last:'')+'</p>'+
+  '<label style="display:block;font-size:12px;color:var(--dim);margin:8px 0 4px">Display name</label>'+
+  '<input id="gDisp" value="'+g.display.replace(/"/g,'&quot;')+'">'+
+  '<label style="display:block;font-size:12px;color:var(--dim);margin:8px 0 4px">Miles before timely (if not new when first logged)</label>'+
+  '<input id="gStart" type="number" value="0">'+
+  '<label style="display:block;font-size:12px;color:var(--dim);margin:8px 0 4px">Retire at (mi)</label>'+
+  '<input id="gThresh" type="number" value="'+g.threshold+'">'+
+  '<div class="row">'+
+  '<button onclick="gearSave(\''+key+'\',true)" style="color:var(--hard)">Retire shoe</button>'+
+  '<button onclick="closeDetail()">Cancel</button>'+
+  '<button class="primary" onclick="gearSave(\''+key+'\',false)">Save</button></div>';
+ document.getElementById('dmodal').innerHTML=h;
+ document.getElementById('dscrim').classList.add('show');
+}
+async function gearSave(key,retire){
+ try{
+  await jpost('/api/gear',{key:key,display:document.getElementById('gDisp').value,
+   startMi:parseFloat(document.getElementById('gStart').value)||0,
+   thresholdMi:parseFloat(document.getElementById('gThresh').value)||400,
+   retired:retire});
+  closeDetail();toast(retire?'Retired — thanks for the miles':'Gear updated');
+  const j=await jget('/api/gear');S.gear=j.gear||[];render();
+ }catch(e){toast('Gear save failed: '+e.message,{err:1});}
 }
 
 /* ---------------- vacation mode: plan around it ---------------- */
@@ -1610,6 +1717,11 @@ def cmd_notify():
             msg += " (" + ", ".join(bits) + ")"
     except Exception:
         pass
+    _push(msg)
+
+
+def _push(msg):
+    """Mac notification + phone push via ntfy.sh (topic in ~/.timely_ntfy)."""
     print(msg)
     try:
         subprocess.run(["osascript", "-e",
@@ -1617,13 +1729,8 @@ def cmd_notify():
                         % msg.replace('"', "'")], check=False)
     except Exception:
         pass
-    # Phone push via ntfy.sh: put your secret topic name in ~/.timely_ntfy
-    # (e.g. `echo timely-earwin-x7k2q > ~/.timely_ntfy`), subscribe to the
-    # same topic in the ntfy iOS app, and these notifications reach your
-    # phone anywhere. Topic name = the secret; make it unguessable.
     try:
-        topic_file = os.path.expanduser("~/.timely_ntfy")
-        with open(topic_file) as f:
+        with open(os.path.expanduser("~/.timely_ntfy")) as f:
             topic = f.read().strip()
         if topic:
             import urllib.request
@@ -1636,6 +1743,23 @@ def cmd_notify():
         pass
     except Exception as e:
         print("(phone push failed: %s)" % e)
+
+
+def _run_watcher():
+    """Every 10 min: sync activities; push when a NEW recent run lands so
+    you know the whole pipeline worked before you've untied your shoes."""
+    while True:
+        try:
+            before = {str(r.get("activityId")) for r in store.get_runs()}
+            recent = (date.today() - timedelta(days=2)).isoformat()
+            for r in fetch_actuals()["runs"]:
+                aid = str(r.get("activityId"))
+                if aid and aid not in before and r["date"] >= recent:
+                    _push("Run synced: %.1f mi @ %s/mi — everything worked. "
+                          "Log how it felt in timely." % (r["mi"], r["pace"] or "—"))
+        except Exception:
+            pass
+        time.sleep(600)
 
 
 # -------------------------------------------------------------------- main
@@ -1705,6 +1829,7 @@ def main():
                 pass
             time.sleep(86400)
     threading.Thread(target=_backup_loop, daemon=True).start()
+    threading.Thread(target=_run_watcher, daemon=True).start()
     if not args.no_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

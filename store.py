@@ -79,6 +79,13 @@ CREATE TABLE IF NOT EXISTS kv(
   v TEXT,
   updated_at REAL
 );
+CREATE TABLE IF NOT EXISTS gear(
+  name TEXT PRIMARY KEY,
+  display TEXT,
+  start_mi REAL DEFAULT 0,
+  threshold_mi REAL DEFAULT 400,
+  retired INTEGER DEFAULT 0
+);
 """
 
 
@@ -210,6 +217,57 @@ def get_annotations():
         rows = c.execute("SELECT * FROM annotations").fetchall()
     return {r["activity_id"]: {"rpe": r["rpe"], "note": r["note"],
                                "shoes": r["shoes"]} for r in rows}
+
+
+def gear_summary():
+    """Miles per shoe: annotations.shoes joined to runs, merged with gear
+    metadata (starting miles, threshold, retired)."""
+    init()
+    with _lock, _conn() as c:
+        rows = c.execute(
+            "SELECT lower(trim(a.shoes)) k, min(a.shoes) disp, sum(r.mi) mi,"
+            " count(*) n, max(r.date) last"
+            " FROM annotations a JOIN runs r ON r.activity_id=a.activity_id"
+            " WHERE trim(a.shoes)!='' GROUP BY k").fetchall()
+        meta = {g["name"]: dict(g) for g in c.execute("SELECT * FROM gear")}
+    out, seen = [], set()
+    for r in rows:
+        g = meta.get(r["k"], {})
+        seen.add(r["k"])
+        out.append({"key": r["k"],
+                    "display": g.get("display") or r["disp"],
+                    "mi": round((g.get("start_mi") or 0) + (r["mi"] or 0), 1),
+                    "runs": r["n"], "last": r["last"],
+                    "threshold": g.get("threshold_mi") or 400,
+                    "retired": bool(g.get("retired"))})
+    for k, g in meta.items():           # gear registered but not yet run in
+        if k not in seen:
+            out.append({"key": k, "display": g.get("display") or k,
+                        "mi": round(g.get("start_mi") or 0, 1), "runs": 0,
+                        "last": None, "threshold": g.get("threshold_mi") or 400,
+                        "retired": bool(g.get("retired"))})
+    out.sort(key=lambda g: (g["retired"], -g["mi"]))
+    return out
+
+
+def set_gear(key, display=None, start_mi=None, threshold_mi=None, retired=None):
+    init()
+    key = key.lower().strip()[:60]
+    with _lock, _conn() as c:
+        row = c.execute("SELECT * FROM gear WHERE name=?", (key,)).fetchone()
+        cur = dict(row) if row else {"display": None, "start_mi": 0,
+                                     "threshold_mi": 400, "retired": 0}
+        if display is not None:
+            cur["display"] = display[:60]
+        if start_mi is not None:
+            cur["start_mi"] = max(0.0, float(start_mi))
+        if threshold_mi is not None:
+            cur["threshold_mi"] = max(50.0, float(threshold_mi))
+        if retired is not None:
+            cur["retired"] = 1 if retired else 0
+        c.execute("INSERT OR REPLACE INTO gear VALUES(?,?,?,?,?)",
+                  (key, cur["display"], cur["start_mi"], cur["threshold_mi"],
+                   cur["retired"]))
 
 
 def set_kv(k, v):
