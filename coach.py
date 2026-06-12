@@ -699,16 +699,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "max-age=86400")
                 self.end_headers()
                 return self.wfile.write(body)
-            if not self._authorized():
-                return self._json({"error": "unauthorized — use the link with ?key=… printed in Terminal"}, 403)
-            if route == "/app.js":
-                body = _asset("app.js")
+            if route == "/app.js":   # public like the icon: browsers fetch it
+                body = _asset("app.js")              # keyless; it holds no secrets
                 self.send_response(200)
                 self.send_header("Content-Type", "application/javascript; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self._headers()
                 self.end_headers()
                 return self.wfile.write(body)
+            if not self._authorized():
+                return self._json({"error": "unauthorized — use the link with ?key=… printed in Terminal"}, 403)
             if route == "/" or route.startswith("/index"):
                 body = _asset("ui.html")
                 self.send_response(200)
