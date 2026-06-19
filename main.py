@@ -12,18 +12,22 @@ import socket
 import struct
 import sys
 import threading
+import time
 import webbrowser
 import zlib
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, Response
 
 from src.config import PORT, BACKUP_DIR
 from src.api.routes import router, set_access_key
 from src.services.notify import run_watcher, backup_loop
+from src.services.applog import get_logger
+
+log = get_logger("http")
 
 # ---------------------------------------------------------------------------
 # App icon (pure stdlib PNG — no Pillow, no asset files, can't go missing)
@@ -114,9 +118,11 @@ def _load_key() -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     bd = BACKUP_DIR or str(_ASSET_DIR)
-    threading.Thread(target=backup_loop, args=(bd,), daemon=True).start()
-    threading.Thread(target=run_watcher, daemon=True).start()
+    log.info("startup: launching background threads (backup_dir=%s)", bd)
+    threading.Thread(target=backup_loop, args=(bd,), daemon=True, name="backup_loop").start()
+    threading.Thread(target=run_watcher, daemon=True, name="run_watcher").start()
     yield
+    log.info("shutdown")
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +130,23 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 app = FastAPI(title="timely — MCM coach", lifespan=lifespan)
 app.include_router(router)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """T11: per-request visibility. Before this, the only record of an
+    HTTP error was whatever the client happened to see — nothing server-
+    side correlated a user-reported issue with what actually ran."""
+    start = time.time()
+    try:
+        response = await call_next(request)
+    except Exception:
+        log.exception("unhandled error: %s %s", request.method, request.url.path)
+        raise
+    ms = (time.time() - start) * 1000
+    level = log.warning if response.status_code >= 400 else log.info
+    level("%s %s -> %d (%.1fms)", request.method, request.url.path, response.status_code, ms)
+    return response
 
 
 @app.get("/apple-touch-icon.png", include_in_schema=False)

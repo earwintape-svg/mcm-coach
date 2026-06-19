@@ -14,7 +14,10 @@ from src.services.fitness import fetch_fitness, fetch_prs
 from src.services.weather import fetch_weather, heat_pct
 from src.services.plan_svc import plan_summary
 from src.services.trends import build_week_review
+from src.services.applog import get_logger
 from builders import MILE
+
+log = get_logger("notify")
 
 
 def _fmt_pace(mps: float) -> str:
@@ -129,27 +132,63 @@ def cmd_notify(weekly: bool = False):
     _push(msg)
 
 
+# G10: both background threads below used to be `try: ... except Exception:
+# pass` -- resilient to a single bad iteration (a network blip shouldn't
+# kill the loop), but a *persistent* failure (Garmin/intervals.icu auth
+# broken, disk full, backup dir unmounted) would then loop forever with
+# zero signal. _run_resilient_loop keeps the "don't die on one bad tick"
+# behavior but adds: every failure logged with a full traceback (rotating
+# file, see applog.py); the first failure in a streak triggers a phone
+# push, further pushes for the same streak rate-limited to once/hour so a
+# real outage alerts promptly without spamming; a push when it recovers;
+# and a once-a-day "still alive" heartbeat written to the log (not pushed
+# -- the user already gets a 7:30 daily briefing push, a second daily push
+# that says nothing actionable would just train them to ignore pushes).
+_ALERT_COOLDOWN_SEC = 3600
+_last_heartbeat_date: dict = {}
+_last_alert_at: dict = {}
+
+
+def _run_resilient_loop(name: str, interval_sec: int, tick) -> None:
+    failing_since = None
+    while True:
+        today = date.today()
+        if _last_heartbeat_date.get(name) != today:
+            log.info("%s: heartbeat -- thread alive", name)
+            _last_heartbeat_date[name] = today
+        try:
+            tick()
+            if failing_since is not None:
+                log.info("%s: recovered (had been failing since %s)", name, failing_since)
+                _push("timely: %s recovered" % name)
+                failing_since = None
+        except Exception:
+            log.exception("%s: iteration failed", name)
+            now = time.time()
+            if failing_since is None:
+                failing_since = today.isoformat()
+            if now - _last_alert_at.get(name, 0) >= _ALERT_COOLDOWN_SEC:
+                _push("timely: %s has been failing since %s -- check "
+                      "~/Library/Logs/timely.log" % (name, failing_since))
+                _last_alert_at[name] = now
+        time.sleep(interval_sec)
+
+
 def run_watcher():
     """Every 10 min: sync activities; push when a new run lands."""
-    while True:
-        try:
-            before = {str(r.get("activityId")) for r in store.get_runs()}
-            recent = (date.today() - timedelta(days=2)).isoformat()
-            for r in fetch_actuals()["runs"]:
-                aid = str(r.get("activityId"))
-                if aid and aid not in before and r["date"] >= recent:
-                    _push("Run synced: %.1f mi @ %s/mi — everything worked. "
-                          "Log how it felt in timely." % (r["mi"], r["pace"] or "—"))
-        except Exception:
-            pass
-        time.sleep(600)
+    def _tick():
+        before = {str(r.get("activityId")) for r in store.get_runs()}
+        recent = (date.today() - timedelta(days=2)).isoformat()
+        for r in fetch_actuals()["runs"]:
+            aid = str(r.get("activityId"))
+            if aid and aid not in before and r["date"] >= recent:
+                _push("Run synced: %.1f mi @ %s/mi — everything worked. "
+                      "Log how it felt in timely." % (r["mi"], r["pace"] or "—"))
+    _run_resilient_loop("run_watcher", 600, _tick)
 
 
 def backup_loop(backup_dir: str):
     """Every 5 min: snapshot the live DB to a backup file."""
-    while True:
-        try:
-            store.backup(backup_dir)
-        except Exception:
-            pass
-        time.sleep(300)
+    def _tick():
+        store.backup(backup_dir)
+    _run_resilient_loop("backup_loop", 300, _tick)

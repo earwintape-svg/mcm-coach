@@ -94,9 +94,20 @@ frontend* and published on GitHub Pages.
   run details cached forever (immutable, versioned for schema changes);
   weather 30min; wellness 30min with store fallback when Garmin is down.
 - **Background threads**: daily DB backup; run watcher (10-min poll →
-  "Run synced" push when a new activity lands). Both are daemon threads
-  with no crash visibility today — an exception in either dies silently
-  (G10 on the hardening backlog).
+  "Run synced" push when a new activity lands). Both run through
+  `_run_resilient_loop` (`src/services/notify.py`, G10, 2026-06-19): a bad
+  iteration is still tolerated (the loop never dies), but now every
+  exception is logged with a full traceback, the first failure of a streak
+  triggers a phone push (rate-limited to once/hour for the same streak), a
+  recovery triggers one more push, and a once-daily heartbeat line confirms
+  the thread is alive even when nothing is failing. Logging itself is
+  `src/services/applog.py` (T11): a rotating file at
+  `~/Library/Logs/timely.log` (5MB×3), separate from launchd's raw stdout
+  capture (`~/Library/Logs/mcmcoach.log`, unstructured, unrotated, set in
+  `lan.sh`). `main.py` also gained an HTTP middleware logging
+  method/path/status/latency per request (info, or warning at ≥400) —
+  before this, an error report from the phone had nothing server-side to
+  correlate it against.
 - **Notifications**: macOS `osascript` + phone push via ntfy.sh (secret
   topic in `~/.timely_ntfy`). Scheduled by LaunchAgents: 7:30 briefing,
   18:30 log-nudge, Sunday 18:00 week-in-review.
@@ -155,8 +166,20 @@ frontend* and published on GitHub Pages.
   `test_upload_garmin.py` instead of `pytest`, and `git add`-ed an
   explicit file list that didn't mention `main.py`, `src/`, `tests/`, or
   any of the intervals.icu/gcal files — fixed to run `pytest -q` and
-  `git add -A` (safe now that `.gitignore` actually covers secrets/
-  generated/db files).
+  expanded the explicit list to cover the new tree. Deliberately **not**
+  `git add -A`: this directory accumulates sandbox/FUSE artifacts
+  (`.fuse_hidden*`, `*.egg-info/`) that should never be staged, and a
+  blanket add is exactly how the `client_secret.json` near-miss in the
+  retrospective below would have happened. See `AGENTS.md`.
+- **`AGENTS.md` + `.github/CODEOWNERS`** (2026-06-19) — repo governance for
+  the multiple agents now working this codebase concurrently (infra
+  engineer / product engineer / UX designer). OPEN zones (`product/`,
+  `design/`) are docs/design, no review gate; everything else is
+  RESTRICTED — must keep `pytest -q` green, focused commits, never weaken
+  the Garmin schema invariants. `hooks/pre-commit` (`core.hooksPath=hooks`)
+  blocks direct commits to `main`; the workflow is branch → push → PR →
+  CI-gated merge. The reference docs (`ROADMAP.md`, the task briefs) moved
+  to `product/` as part of this; a design critique doc lives in `design/`.
 - **Networking**: LAN via key URL; anywhere via Tailscale (WireGuard);
   Mac wakes itself daily at 7:25 (`pmset repeat`).
 
@@ -178,29 +201,50 @@ frontend* and published on GitHub Pages.
    wraps remote traffic in WireGuard, which is the real transport
    security; bare-LAN use is honest-but-plaintext. (`tailscale serve`
    could add real HTTPS later.)
-4. **Frontend with no JS tests.** `PAGE` has since been extracted into
-   `ui.html` (no longer embedded as a Python string — that part of this
-   item is resolved), but there's still no JS test harness; verification
-   is "it loads + manual click-through." Known latent issue, not
-   re-verified this round: user-entered notes are interpolated into HTML
-   unescaped — self-XSS only (single user, own data), but it's the first
-   thing to fix if anyone else ever logs in (T8 on the backlog).
-5. **No CI.** Tests run locally via ship.sh; nothing prevents a push from
-   a different machine skipping them. A 10-line GitHub Action would close
-   this (T4 on the backlog).
+4. **Frontend XSS — resolved (T8, 2026-06-19).** `PAGE` was extracted into
+   `ui.html`/`app.js` (no longer a Python string) and the real interpolation
+   gaps found this round (calendar grid, week report, vacation preview, all
+   `e.message` toasts) are now routed through `escapeHTML()`; see
+   `tests/test_frontend_escaping.py`. Still true: no JS test *harness*
+   beyond that targeted smoke test — broader frontend testing would need
+   jsdom or a real browser runner, not attempted here.
+5. **CI — resolved (T4).** `.github/workflows/ci.yml` runs `pytest -q` +
+   an import smoke test on Python 3.9 on every push/PR. Residual gap:
+   branch protection requiring it to pass before merge is a GitHub repo
+   setting, not something committable from this environment — needs a
+   human to flip on (see also the `main`-protection pre-commit hook under
+   "Publish + ops," which is a local/client-side guard, not a server-side
+   one; it doesn't substitute for branch protection).
 6. **Autoship trust boundary.** Anything that can write `.ship_request`
    into the (Drive-synced!) folder triggers a deploy. Bounded — only
    ship.sh runs and the file is used solely as a commit message — but a
    compromised Drive account = code-push capability.
-7. **API routes skip request validation.** All 8 mutating FastAPI routes
-   take `body: dict` and index in manually instead of Pydantic models —
-   paying FastAPI's dependency cost without its main benefit (T5).
-   Replacing this must keep using `Optional[X]`/`Union[X, Y]`, never
-   `X | Y` — see the Python 3.9 note in "Serve plane" above.
-8. **Migrations are ad-hoc.** `store.init()`'s `try: ALTER … except` + a
-   `kv` flag works but is idempotent by accident (T7).
-9. **Assorted smaller debts**: timezone-naive dates (server-local
-   assumptions); Python 3.9 from CommandLineTools (an Xcode update can
+7. **API request validation — resolved (T5).** All 8 mutating FastAPI
+   routes now take typed Pydantic models (`src/api/schemas.py`) instead of
+   a bare `body: dict`; invalid payloads get a 422 instead of an
+   unhandled `KeyError`/`TypeError` deep in business logic. Per the Python
+   3.9 note in "Serve plane," every model field uses `Optional[X]`/
+   `Union[X, Y]`, never `X | Y`.
+8. **Migrations — resolved (T7).** `store.py` now has a `schema_version`
+   row in `kv` and an ordered `MIGRATIONS` list applied when
+   `version < i`, with legacy-state detection so a pre-existing DB that
+   went through the old ad-hoc `try: ALTER … except` logic isn't
+   double-migrated. See `tests/test_store_migrations.py`.
+9. **Assorted smaller debts**: timezone-naive dates — audited 2026-06-19
+   (T11): `date.today()`/`datetime.now()` are used naively in 11 files
+   (`schedule.py`, `trends.py`, `gcal.py`, `actuals.py`, `notify.py`,
+   `coaching.py`, `weather.py`, `fitness.py`, `wellness.py`, `plan_svc.py`,
+   `routes.py`), always against the Mac's system clock, never normalized
+   to/from UTC. For a single-user app where the Mac lives wherever the
+   runner currently is, "today" tracking the system clock is the *correct*
+   behavior, not a bug — the risk is narrower than "wrong timezone": a
+   midnight-boundary mismatch between a UTC activity timestamp from
+   intervals.icu/Garmin and a local `date.today()` comparison, most likely
+   right after a timezone change (race travel) or DST transition. Worth
+   fixing if a "missing today's run" report ever shows up around such a
+   transition; not worth a speculative rewrite across 11 files today. Left
+   as documented, not changed, per this ticket's "audit" scope.
+   Python 3.9 from CommandLineTools (an Xcode update can
    move it; production is pinned at 3.9.6 — verify in the real
    environment, not whatever a sandbox/CI runner reports); coarse
    per-process DB lock (fine for 2 processes, not 20); VDOT from training
@@ -230,11 +274,15 @@ Day 1: run `./lan.sh status`, `python3 -m pytest -q`, read `builders.py`
 top comments and `store.py` SCHEMA — that's 80% of the mental model. Then
 read `src/services/actuals.py` for the intervals.icu/Garmin/store
 precedence and `src/services/gcal.py` for the Calendar mirror — both are
-new since this doc was first written and easy to miss. First engineering
-investments, in rough order: GitHub Actions CI on push (T4); an
-HTML-escape helper applied at every interpolation of user text (T8);
-Pydantic request models on the mutating routes, keeping `Optional[X]`
-syntax for Python 3.9 (T5). After that, `ROADMAP.md` is the current
-product-truth doc — `PRDS.md` (the original spec) and `WRITEUP.md` are
-archived at `archive/` as historical record, superseded by ROADMAP.md and
-this file.
+new since this doc was first written and easy to miss. T0–T8 and T10 are
+done (CI, XSS, Pydantic request models, versioned migrations, the 3.9 pin
+— see the weakness register above for what each closed). Current
+priority, per the 2026-06-19 EM review (`product/ENGINEERING_REVIEW_TASKS.md`
+rev.4): G1+G2 (versioned, verified backups) first — "protect the data" is
+the stated top goal and a corrupted single-file backup is the biggest
+single-point-of-failure left; then G5 (pre-commit secret scanning) and G7
+(mypy in CI); T11/G3/G4 and the rest of G6–G12 round out the backlog.
+`product/` now holds `ROADMAP.md` and the task briefs (moved there
+2026-06-19, see `AGENTS.md` for the OPEN/RESTRICTED zone split that
+motivated it) — `PRDS.md`/`WRITEUP.md` stay archived at `archive/` as
+historical record, superseded by `product/ROADMAP.md` and this file.
