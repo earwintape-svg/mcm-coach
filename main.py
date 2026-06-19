@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from src.config import PORT, BACKUP_DIR
 from src.api.routes import router, set_access_key
-from src.services.notify import run_watcher, backup_loop
+from src.services.notify import run_watcher, backup_loop, restore_drill_loop
 from src.services.applog import get_logger
 
 log = get_logger("http")
@@ -121,6 +121,7 @@ async def lifespan(app: FastAPI):
     log.info("startup: launching background threads (backup_dir=%s)", bd)
     threading.Thread(target=backup_loop, args=(bd,), daemon=True, name="backup_loop").start()
     threading.Thread(target=run_watcher, daemon=True, name="run_watcher").start()
+    threading.Thread(target=restore_drill_loop, args=(bd,), daemon=True, name="restore_drill_loop").start()
     yield
     log.info("shutdown")
 
@@ -187,7 +188,8 @@ def main():
     import uvicorn
 
     ap = argparse.ArgumentParser(description="MCM Coach — training dashboard")
-    ap.add_argument("command", nargs="?", choices=["serve", "notify"], default="serve")
+    ap.add_argument("command", nargs="?",
+                     choices=["serve", "notify", "verify-backup"], default="serve")
     ap.add_argument("--lan", action="store_true", help="listen on Wi-Fi network (key-protected)")
     ap.add_argument("--port", type=int, default=PORT)
     ap.add_argument("--no-browser", action="store_true")
@@ -197,6 +199,20 @@ def main():
     if args.command == "notify":
         from src.services.notify import cmd_notify
         cmd_notify(weekly=args.weekly)
+        return
+
+    if args.command == "verify-backup":
+        # G2: manual trigger for the same drill restore_drill_loop runs
+        # monthly -- "did the last backup actually load and check out?"
+        # without waiting for the schedule.
+        import store
+        bd = BACKUP_DIR or str(_ASSET_DIR)
+        try:
+            counts = store.verify_backup(bd)
+        except Exception as e:
+            print("BACKUP VERIFICATION FAILED: %s" % e)
+            sys.exit(1)
+        print("Backup OK — %s" % counts)
         return
 
     host = "0.0.0.0" if args.lan else "127.0.0.1"

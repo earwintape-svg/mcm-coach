@@ -192,3 +192,24 @@ def backup_loop(backup_dir: str):
     def _tick():
         store.backup(backup_dir)
     _run_resilient_loop("backup_loop", 300, _tick)
+
+
+# G2: "a backup you've never restored isn't a backup." Ticks hourly (so a
+# restart doesn't push the check out by a full cycle) but the actual drill
+# -- copy the latest snapshot, integrity_check it, sanity-check row counts
+# -- only runs once _RESTORE_DRILL_INTERVAL_DAYS have actually elapsed
+# since the last one, tracked in kv (store.get_kv/set_kv) so the cadence
+# survives the always-on service restarting. Failure visibility (log +
+# rate-limited phone push) comes for free from _run_resilient_loop (G10).
+_RESTORE_DRILL_INTERVAL_DAYS = 30
+
+
+def restore_drill_loop(backup_dir: str):
+    def _tick():
+        _, age_sec = store.get_kv("last_restore_drill")
+        if age_sec is not None and age_sec < _RESTORE_DRILL_INTERVAL_DAYS * 86400:
+            return
+        counts = store.verify_backup(backup_dir)
+        store.set_kv("last_restore_drill", time.time())
+        log.info("restore_drill: passed (%s)", counts)
+    _run_resilient_loop("restore_drill", 3600, _tick)

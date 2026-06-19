@@ -10,9 +10,12 @@ CLI to share (WAL mode, short transactions).
 """
 import json
 import os
+import shutil
 import sqlite3
+import tempfile
 import threading
 import time
+from datetime import date
 
 DB_PATH = os.environ.get("TIMELY_DB") or os.path.join(
     os.path.expanduser("~/Library/Application Support/MCMCoach"), "timely.db")
@@ -444,16 +447,109 @@ def delete_gcal_event(schedule_id):
 
 def backup(dest_dir):
     """Online backup of the whole DB (safe while in use) into dest_dir.
-    The proprietary dataset should never live on exactly one disk."""
+    The proprietary dataset should never live on exactly one disk.
+
+    G1: this used to overwrite a single timely-backup.db every call -- a
+    corrupt write (a backup taken mid-disk-error, say) would silently
+    destroy your only copy with no history to fall back to. Now it keeps
+    rolling, timestamped snapshots: a daily/ file per calendar day
+    (re-backed-up on every call that day, so it always reflects that
+    day's latest state) and a weekly/ file per ISO week, written once on
+    the first backup of that week and left alone afterward -- a fixed
+    checkpoint, not a moving target. Both are pruned to a retention
+    window. `timely-backup.db` (the old single-file path) is kept too,
+    as a fast "most recent" pointer -- nothing else in the codebase reads
+    daily/weekly directly yet, but keeping the old path means nothing
+    that already depends on it breaks.
+    """
     init()
-    dest = os.path.join(dest_dir, "timely-backup.db")
+    daily_dir = os.path.join(dest_dir, "daily")
+    weekly_dir = os.path.join(dest_dir, "weekly")
+    os.makedirs(daily_dir, exist_ok=True)
+    os.makedirs(weekly_dir, exist_ok=True)
+
+    today = date.today()
+    daily_path = os.path.join(daily_dir, "timely-%s.db" % today.isoformat())
+    iso_year, iso_week, _ = today.isocalendar()
+    weekly_path = os.path.join(weekly_dir, "timely-%04d-W%02d.db" % (iso_year, iso_week))
+    latest_path = os.path.join(dest_dir, "timely-backup.db")
+
     with _lock:
         src = _conn()
         try:
-            dst = sqlite3.connect(dest)
+            dst = sqlite3.connect(daily_path)
             with dst:
                 src.backup(dst)
             dst.close()
         finally:
             src.close()
-    return dest
+
+    shutil.copy2(daily_path, latest_path)
+    if not os.path.exists(weekly_path):
+        shutil.copy2(daily_path, weekly_path)
+
+    _prune_snapshots(daily_dir, keep=14)
+    _prune_snapshots(weekly_dir, keep=8)
+    return latest_path
+
+
+def _prune_snapshots(dirpath, keep):
+    """Filenames are timely-YYYY-MM-DD.db / timely-YYYY-Www.db -- both
+    sort lexicographically in chronological order, so a plain sort is
+    enough to find the oldest."""
+    files = sorted(f for f in os.listdir(dirpath)
+                    if f.startswith("timely-") and f.endswith(".db"))
+    for f in files[:-keep] if len(files) > keep else []:
+        try:
+            os.remove(os.path.join(dirpath, f))
+        except OSError:
+            pass
+
+
+def verify_backup(dest_dir):
+    """G2: 'a backup you've never restored isn't a backup.' Loads the
+    most recent snapshot into a throwaway temp DB (never touches the
+    live DB or the backup file itself), runs PRAGMA integrity_check, and
+    sanity-checks row counts against the live DB. Raises on any failure
+    -- a function that silently returns False here would recreate the
+    exact gap this ticket exists to close. Returns a dict of row counts
+    on success.
+    """
+    latest_path = os.path.join(dest_dir, "timely-backup.db")
+    if not os.path.exists(latest_path):
+        raise RuntimeError("no backup found at %s" % latest_path)
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp_path = os.path.join(td, "restore_check.db")
+        shutil.copy2(latest_path, tmp_path)
+        conn = sqlite3.connect(tmp_path)
+        try:
+            ok = conn.execute("PRAGMA integrity_check").fetchone()[0]
+            if ok != "ok":
+                raise RuntimeError("backup failed integrity_check: %s" % ok)
+            counts = {}
+            for table in ("runs", "annotations", "gear", "weekly_reviews"):
+                counts[table] = conn.execute(
+                    "SELECT COUNT(*) FROM " + table).fetchone()[0]
+        finally:
+            conn.close()
+
+    # gear always has >=2 rows after init() seeds default shoes -- if the
+    # backup shows 0, something's structurally wrong with the snapshot,
+    # not just "a quiet week."
+    if counts["gear"] == 0:
+        raise RuntimeError("backup's gear table is empty -- expected seeded "
+                            "defaults; snapshot looks corrupt or truncated")
+
+    with _lock:
+        live = _conn()
+        try:
+            live_runs = live.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+        finally:
+            live.close()
+    if live_runs > 0 and counts["runs"] == 0:
+        raise RuntimeError(
+            "backup has 0 runs but the live DB has %d -- snapshot looks "
+            "empty/stale" % live_runs)
+
+    return counts

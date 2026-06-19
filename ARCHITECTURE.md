@@ -51,10 +51,18 @@ frontend* and published on GitHub Pages.
   JSON blobs for everything a third party controls (schema-on-read); new
   sources get new tables keyed by one of the two hubs, never new columns.
   `/api/import` is a generic inbox (Apple Health via Health Auto Export,
-  etc.). Nightly `backup()` copies the DB into the (Drive-synced) project
-  folder. Migrations today are ad-hoc (`try: ALTER … except` plus a `kv`
-  flag) — idempotent by accident, not by design; T7 on the engineering
-  backlog is a versioned `schema_version` + ordered migration list.
+  etc.). `backup()` runs every 5 min (not nightly — the brief's
+  description was stale; see RC-5-style note: re-read code, not the doc,
+  when they disagree) and, since G1 (2026-06-19), keeps rolling
+  timestamped daily/weekly snapshots in the (Drive-synced, so off-machine)
+  `BACKUP_DIR` rather than overwriting one file — a corrupt write used to
+  silently destroy the only copy. `verify_backup()` (G2) loads the latest
+  snapshot into a throwaway temp DB, runs `PRAGMA integrity_check`, and
+  sanity-checks row counts against the live DB; `restore_drill_loop` runs
+  it monthly (cadence tracked in `kv`, survives restarts) and `python3
+  main.py verify-backup` runs it on demand. Migrations are versioned
+  (`schema_version` + an ordered `MIGRATIONS` list, T7, resolved) — see
+  `tests/test_store_migrations.py`.
 - **`intervalsicu_read.py`** — read-only intervals.icu client. **This is
   now the primary source for completed-run data**, ahead of Garmin:
   `src/services/actuals.py`'s `fetch_actuals()` precedence is
@@ -93,8 +101,10 @@ frontend* and published on GitHub Pages.
   kv store stale-while-revalidate (instant loads, background refresh);
   run details cached forever (immutable, versioned for schema changes);
   weather 30min; wellness 30min with store fallback when Garmin is down.
-- **Background threads**: daily DB backup; run watcher (10-min poll →
-  "Run synced" push when a new activity lands). Both run through
+- **Background threads**: DB backup (5-min); run watcher (10-min poll →
+  "Run synced" push when a new activity lands); restore drill (G2, hourly
+  tick, gated to run monthly — see Data plane above). All three run
+  through
   `_run_resilient_loop` (`src/services/notify.py`, G10, 2026-06-19): a bad
   iteration is still tolerated (the loop never dies), but now every
   exception is logged with a full traceback, the first failure of a streak

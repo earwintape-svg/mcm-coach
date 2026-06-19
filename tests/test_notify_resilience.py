@@ -16,6 +16,7 @@ intentionally infinite in production, so "run exactly N times then stop"
 is how you unit test it without a real background thread.
 """
 import logging
+import time
 
 import pytest
 
@@ -116,3 +117,49 @@ class TestResilientLoop:
         heartbeats = [r for r in caplog.records if "heartbeat" in r.message]
         # Same calendar day across all 3 iterations -> logged exactly once.
         assert len(heartbeats) == 1
+
+
+class TestRestoreDrillLoop:
+    """G2: restore_drill_loop ticks hourly but only actually runs
+    store.verify_backup() once _RESTORE_DRILL_INTERVAL_DAYS have elapsed
+    since the last recorded drill (store.get_kv/set_kv("last_restore_drill")),
+    so a process that restarts often doesn't re-run an expensive check
+    every hour forever."""
+
+    def test_runs_immediately_when_never_run_before(self, monkeypatch, tmp_path, _reset_module_state):
+        import store
+        calls = []
+        monkeypatch.setattr(store, "verify_backup", lambda d: calls.append(d) or {"runs": 0})
+        _run_n_then_stop(monkeypatch, 1)
+
+        with pytest.raises(_StopLoop):
+            notify.restore_drill_loop(str(tmp_path))
+
+        assert calls == [str(tmp_path)]
+        value, age = store.get_kv("last_restore_drill")
+        assert age is not None and age < 5
+
+    def test_does_not_rerun_within_interval(self, monkeypatch, tmp_path, _reset_module_state):
+        import store
+        calls = []
+        monkeypatch.setattr(store, "verify_backup", lambda d: calls.append(d) or {"runs": 0})
+        store.set_kv("last_restore_drill", time.time())  # "just ran"
+        _run_n_then_stop(monkeypatch, 3)
+
+        with pytest.raises(_StopLoop):
+            notify.restore_drill_loop(str(tmp_path))
+
+        assert calls == []
+
+    def test_failure_surfaces_through_resilient_loop(self, monkeypatch, tmp_path, _reset_module_state):
+        import store
+        pushes = _reset_module_state
+        monkeypatch.setattr(store, "verify_backup",
+                             lambda d: (_ for _ in ()).throw(RuntimeError("corrupt")))
+        _run_n_then_stop(monkeypatch, 1)
+
+        with pytest.raises(_StopLoop):
+            notify.restore_drill_loop(str(tmp_path))
+
+        assert len(pushes) == 1
+        assert "restore_drill" in pushes[0]
