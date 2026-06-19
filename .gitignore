@@ -12,6 +12,10 @@ workout_json/
 __pycache__/
 *.pyc
 .venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
 .DS_Store
 timely-backup.db
 timely-backup.db-*

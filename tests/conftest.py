@@ -1,15 +1,14 @@
 """Test fixtures — shared across the suite.
 
 Uses an in-memory SQLite store so tests never touch the real database.
-"""
-import sys
-import os
-from pathlib import Path
-import pytest
 
-# Ensure the project root is on sys.path so `import store` etc. work.
-ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(ROOT))
+`import store` etc. work because the project is installed editable
+(`pip install -e .` via pyproject.toml's py-modules/packages.find config
+-- see T4 in ENGINEERING_REVIEW_TASKS.md). This used to sys.path-insert
+the repo root by hand; if `import store` starts failing again, the fix is
+re-running `pip install -e .[dev]`, not restoring the hack.
+"""
+import pytest
 
 
 @pytest.fixture(autouse=True)
