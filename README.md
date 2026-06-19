@@ -1,7 +1,14 @@
 # Garmin Structured Workout Uploader — v2
 
 MCM 2026 plan (19 weeks, 93 workouts) → Garmin Connect → Forerunner 255.
-Python 3.9 / garminconnect 0.2.8 compatible, no other dependencies.
+
+The uploader itself (`upload_garmin_workouts.py`, `builders.py`, `plan.py`)
+is Python 3.9 / garminconnect 0.2.8 compatible with no other dependencies.
+The coach dashboard (`main.py` + `src/`) now runs on FastAPI/uvicorn and
+needs `pip install -r requirements.txt` — see `requirements.txt` for the
+full list (FastAPI, uvicorn, garminconnect, and the Google API client
+libraries used by the Calendar sync below). Production runs **Python
+3.9.6** — verify any change there before assuming a newer interpreter.
 
 ## What changed from v1
 
@@ -34,32 +41,60 @@ Auth: set `GARMIN_EMAIL` / `GARMIN_PASSWORD` or answer the prompt once; tokens p
 ## Coach dashboard
 
 ```bash
-python3 coach.py     # opens http://127.0.0.1:8765
+python3 coach.py     # opens http://127.0.0.1:8765 (delegates to main.py/uvicorn)
+# or directly:
+uvicorn main:app --host 127.0.0.1 --port 8765
 ```
 
-Local web app (stdlib only, same Garmin tokens): 19-week calendar read live from your Connect schedule, move any workout to a new date, shift a whole week for vacations, weekly planned-vs-actual mileage chart, race countdown. Moves sync to Garmin immediately — sync the watch after. Caveat: `upload --force` re-schedules everything back to plan.py dates, wiping dashboard moves.
+Local web app, same Garmin tokens: 19-week calendar read live from your Connect schedule, move any workout to a new date, shift a whole week for vacations, weekly planned-vs-actual mileage chart, race countdown. Moves sync to Garmin immediately — sync the watch after. Caveat: `upload --force` re-schedules everything back to plan.py dates, wiping dashboard moves.
+
+Completed-run data is read with this precedence: **intervals.icu (primary)
+→ Garmin Connect REST (fallback) → local SQLite store (last resort,
+marked stale)**. Garmin Connect remains the *only* path that pushes
+structured workouts to the watch — intervals.icu is read-only. See
+`src/services/actuals.py` and `ARCHITECTURE.md`.
+
+### Google Calendar mirror
+
+```bash
+python3 setup_gcal.py     # one-time OAuth consent, writes ~/.gcal_token.json
+```
+
+Pushes the schedule to a dedicated "MCM Marathon Plan" Google Calendar —
+planned workouts as Runna-style all-day events (pace-by-segment
+description), and any day with a matching completed run upgrades
+automatically to a timed event with a Summary/Description/Laps
+breakdown. Purely additive: it mirrors the Garmin-sourced schedule, it
+doesn't replace it. See `src/services/gcal.py`.
 
 ## Portfolio demo (no Garmin account needed)
 
 ```bash
-python3 make_demo.py     # builds demo/index.html — one static file
+python3 make_demo.py     # builds docs/index.html — one static file
 ```
 
-The full UI on a synthetic athlete (mid-week-6: on-target runs, one missed day, one slow tempo, a short-sleep readiness banner). Drag-and-drop, vacation mode, and the report card all work — every API call is intercepted by a fetch shim over embedded sample data. Deploy `demo/` to GitHub Pages / Vercel / Netlify. Generated from the real app's UI, so it can't drift.
+The full UI on a synthetic athlete (mid-week-6: on-target runs, one missed day, one slow tempo, a short-sleep readiness banner). Drag-and-drop, vacation mode, and the report card all work — every API call is intercepted by a fetch shim over embedded sample data. Published via GitHub Pages from `docs/` (repo Settings → Pages → branch `main`, folder `/docs`): https://earwintape-svg.github.io/mcm-coach/. Generated from the real app's UI, so it can't drift.
 
 ## Security
 
-- Tokens live in `~/.garmin_tokens` (outside the repo); password entry uses `getpass`, never logged. The `.gitignore` blocks tokens, backups, and fetched workout JSON from commits.
+- Tokens live in `~/.garmin_tokens` (outside the repo); password entry uses `getpass`, never logged. The `.gitignore` blocks tokens, backups, fetched workout JSON, the intervals.icu key (`.intervals_key`), and the Google OAuth `client_secret*.json` from commits. `~/.gcal_token.json` (Calendar OAuth) lives outside the repo entirely, like the Garmin tokens.
 - `--lan` mode requires a per-session secret (`?key=…` printed in Terminal); localhost is always allowed. Without the key, other devices on your Wi-Fi get 403.
 - This app uses Garmin's unofficial consumer API via your own login — fine for personal use, not a basis for hosting other people's accounts. A multi-user product would need Garmin's official Connect Developer Program (OAuth) and a real backend.
 
 ## Tests
 
 ```bash
-python3 test_upload_garmin.py    # 16 tests, ~3,300 assertions, no network
+python3 -m pytest -q    # 76 tests, no network
 ```
 
-Covers all spec categories: bug regressions (estimatedDurationInSecs, HR targets), API contract, step ordering, speed/distance sanity, weekly volume vs. plan targets, schedule dates (starts Mon 2026-06-15, ends Sat 2026-10-24, no Wed/Sun), delete-filter safety, and deep inspections of W1/W4/W7 sample workouts.
+`tests/test_builders.py` covers what `test_upload_garmin.py` used to (now
+archived at `archive/test_upload_garmin.py`): bug regressions
+(estimatedDurationInSecs, HR targets), API contract, step ordering,
+speed/distance sanity, weekly volume vs. plan targets, schedule dates
+(starts Mon 2026-06-15, ends Sat 2026-10-24, no Wed/Sun), delete-filter
+safety, and deep inspections of W1/W4/W7 sample workouts.
+`tests/test_fitness.py` and `tests/test_schedule.py` cover the coach
+dashboard's VDOT math and scheduling logic.
 
 ## Notes & open items
 
