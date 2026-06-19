@@ -1,7 +1,7 @@
 """Trends and week review service."""
 from __future__ import annotations
 from datetime import date, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 import store
 from plan import PLAN_START
@@ -29,7 +29,8 @@ def fetch_trends() -> dict:
         v = sorted(buckets[wk])
         easy.append({"w": wk, "v": v[len(v) // 2]})
     sleep_map = {w["date"]: w["sleepH"] for w in well if w.get("sleepH")}
-    good_paces, poor_paces = [], []
+    good_paces: list[int] = []
+    poor_paces: list[int] = []
     for r in runs:
         pace = r.get("paceSec")
         if not pace or (r.get("mi") or 0) < 2:
@@ -51,7 +52,7 @@ def fetch_trends() -> dict:
             sleep_perf["poor"] = {"avgPace": avg,
                                   "paceStr": "%d:%02d" % (avg // 60, avg % 60),
                                   "n": len(poor_paces)}
-    out = {"rhr": rhr, "easy": easy}
+    out: dict[str, Any] = {"rhr": rhr, "easy": easy}
     if sleep_perf:
         out["sleepPerf"] = sleep_perf
     return out

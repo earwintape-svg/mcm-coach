@@ -51,3 +51,10 @@ jobs:
 
       - name: Format check (informational, not a gate yet)
         run: ruff format --check . || true
+
+      # G7: would have flagged the X | None landmines (T6) and the
+      # body: dict blind spots (T5) before they shipped. Scope/config
+      # lives in pyproject.toml's [tool.mypy] -- pinned to 3.9 so it sees
+      # what prod sees, same reasoning as everything else pinned to 3.9.
+      - name: Type check (mypy)
+        run: mypy

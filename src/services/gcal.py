@@ -206,7 +206,7 @@ def _parse_local_dt(ts: Optional[str]) -> Optional[datetime]:
 def _runs_by_date(runs: list) -> dict:
     """date -> the best (largest-mi) run that day, mirroring the convention
     app.js's assess() already uses for multi-run days."""
-    by_date = {}
+    by_date: dict[str, dict] = {}
     for r in runs:
         d = r.get("date")
         if not d:

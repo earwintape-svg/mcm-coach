@@ -85,9 +85,10 @@ The full UI on a synthetic athlete (mid-week-6: on-target runs, one missed day, 
 ## Tests
 
 ```bash
-python3 -m pip install -e ".[dev]"   # pytest, ruff, detect-secrets
+python3 -m pip install -e ".[dev]"   # pytest, ruff, detect-secrets, mypy
 python3 -m pytest -q                  # 106 tests, no network
 ruff check .                          # lint
+mypy                                   # type check, pinned to 3.9 (see pyproject.toml)
 ```
 
 `tests/test_builders.py` covers what `test_upload_garmin.py` used to (now

@@ -32,8 +32,9 @@ def _predict_secs(meters: float, vdot: float) -> int:
 def fetch_fitness() -> dict:
     """VDOT trend, marathon projection, and efficiency-factor cross-check."""
     runs = store.get_runs()
-    weeks, best28 = {}, None
-    ef_weeks: dict = {}
+    weeks: dict[int, float] = {}
+    best28 = None
+    ef_weeks: dict[int, float] = {}
     today = date.today()
     for r in runs:
         if not r.get("paceSec") or (r.get("mi") or 0) < 3:

@@ -46,7 +46,7 @@ def plan_summary() -> dict:
     if _PLAN_SUMMARY is not None:
         return dict(_PLAN_SUMMARY, today=date.today().isoformat())
     plan = build_plan()
-    weekly = {}
+    weekly: dict[int, float] = {}
     for p in plan:
         weekly[p["week"]] = weekly.get(p["week"], 0.0) + p["distance_mi"]
     _PLAN_SUMMARY = {

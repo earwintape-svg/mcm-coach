@@ -10,7 +10,7 @@ from upload_garmin_workouts import api
 
 
 def _weekly_of(runs: list) -> dict:
-    weekly = {}
+    weekly: dict[int, float] = {}
     for r in runs:
         wk = (date.fromisoformat(r["date"]) - PLAN_START).days // 7 + 1
         if 1 <= wk <= 19:

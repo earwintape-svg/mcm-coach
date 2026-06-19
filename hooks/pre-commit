@@ -65,4 +65,20 @@ if [ -n "$staged_py" ] && command -v ruff >/dev/null 2>&1; then
   fi
 fi
 
+# --- 5. Type check (G7) --------------------------------------------------
+# Hard gate, same soft-fail-locally / hard-fail-in-CI split as detect-
+# secrets and ruff check above. Scoped to staged files outside tests/ --
+# pyproject.toml's [tool.mypy] files= list (the installable package) is
+# the real scope of truth; this is just "don't bother checking test
+# files that aren't in that list anyway."
+staged_py_prod=$(echo "$staged_py" | grep -v '^tests/' || true)
+if [ -n "$staged_py_prod" ]; then
+  if command -v mypy >/dev/null 2>&1; then
+    mypy $staged_py_prod || exit 1
+  else
+    echo "⚠️  mypy not installed locally -- skipping type check"
+    echo "   (still enforced in CI). Run: pip install -e .[dev]"
+  fi
+fi
+
 exit 0

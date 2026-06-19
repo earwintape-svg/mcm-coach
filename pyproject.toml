@@ -26,7 +26,12 @@ dependencies = [
 # actually requires -- if a different pinned fastapi/starlette version
 # wants a different test-client package, pytest's collection error names
 # it explicitly; swap accordingly.
-dev = ["pytest>=7.0,<10.0", "httpx2", "ruff>=0.6,<1.0", "detect-secrets>=1.5,<2.0"]
+dev = [
+    "pytest>=7.0,<10.0", "httpx2", "ruff>=0.6,<1.0", "detect-secrets>=1.5,<2.0",
+    # mypy>=2.0 dropped --python-version 3.9 support -- pin below that so
+    # this can actually target the version prod runs (see [tool.mypy]).
+    "mypy>=1.10,<2.0",
+]
 
 # The repo predates packaging: most modules are flat files at the root
 # (builders.py, plan.py, store.py, main.py, ...) rather than nested under
@@ -63,3 +68,27 @@ extend-exclude = ["archive"]  # frozen reference, see AGENTS.md -- not ours to r
 # style. Not reaching for ruff's stricter rule families (B, UP, SIM, ...)
 # in one pass -- that's a separate, larger-diff decision for later, not
 # bundled into "stand up the tool."
+
+# G7: mypy, pinned to 3.9 for the same reason ruff/CI are -- it needs to
+# see what prod sees, or it can't catch the next `X | None`-style
+# landmine (the whole point of this ticket). Scoped to exactly the files
+# pyproject.toml's own [tool.setuptools] lists as the installable package
+# (py-modules + src/) -- tests/ and archive/ are deliberately excluded:
+# tests aren't shipped, and archive/ is frozen reference (AGENTS.md).
+# follow_imports=skip: dependencies like anyio ship match-statement
+# syntax that doesn't even parse under --python-version 3.9 (a real
+# limitation hit while standing this up, not a style choice) -- skip
+# treats every third-party import as Any rather than trying to check
+# code that was never written to run on 3.9 anyway. Note: mypy >=2.0
+# dropped support for --python-version 3.9 entirely; the dev extra below
+# pins mypy<2.0 so `pip install -e .[dev]` actually gets a version that
+# can target what prod runs.
+[tool.mypy]
+python_version = "3.9"
+follow_imports = "skip"
+ignore_missing_imports = true
+files = [
+    "builders.py", "plan.py", "store.py", "main.py", "coach.py",
+    "upload_garmin_workouts.py", "intervalsicu_read.py", "setup_gcal.py",
+    "make_demo.py", "src",
+]

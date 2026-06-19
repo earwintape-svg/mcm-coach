@@ -8,7 +8,7 @@ import hmac
 import os
 import re
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
@@ -137,6 +137,7 @@ def api_calendar_status(_=_auth):
 
 @router.get("/api/run/{activity_id}")
 def api_run(activity_id: str, _=_auth):
+    aid: Union[int, str]
     if activity_id.isdigit():
         aid = int(activity_id)
     elif re.fullmatch(r"i\d+", activity_id):
@@ -191,7 +192,11 @@ def api_run_gear(activity_id: str, body: RunGearBody, _=_auth):
 @router.post("/api/coach/apply")
 def api_coach_apply(body: CoachApplyBody, _=_auth):
     if body.action == "move":
-        move_workout(body.scheduleId, body.workoutId, body.to)
+        # workoutId/to are Optional on CoachApplyBody by design (see the
+        # schema's own comment) -- only required when action == "move",
+        # which is exactly the branch we're in. mypy can't see that
+        # runtime guarantee from the type alone.
+        move_workout(body.scheduleId, body.workoutId, body.to)  # type: ignore[arg-type]
     else:
         unschedule_workout(body.scheduleId)
     return {"ok": True}
