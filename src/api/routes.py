@@ -26,6 +26,9 @@ from src.services.weather import fetch_weather
 from src.services.trends import fetch_trends, build_week_review
 from src.services.coaching import adapt_training_block
 from src.services import gcal
+from src.api.schemas import (MoveBody, ShiftRangeBody, UnscheduleBody,
+                              ImportBody, GearBody, RunGearBody,
+                              CoachApplyBody, AnnotateBody)
 import store
 
 router = APIRouter()
@@ -151,53 +154,49 @@ def api_run(activity_id: str, _=_auth):
 # ---------------------------------------------------------------------------
 
 @router.post("/api/move")
-def api_move(body: dict, _=_auth):
-    move_workout(int(body["scheduleId"]), int(body["workoutId"]), str(body["date"]))
+def api_move(body: MoveBody, _=_auth):
+    move_workout(body.scheduleId, body.workoutId, body.date)
     return {"ok": True}
 
 
 @router.post("/api/shift_range")
-def api_shift_range(body: dict, _=_auth):
-    days = int(body["days"])
-    if abs(days) > 90:
-        raise HTTPException(status_code=400, detail="shift limited to ±90 days")
-    return {"ok": True, "moved": shift_range(str(body["from"]), str(body["to"]), days)}
+def api_shift_range(body: ShiftRangeBody, _=_auth):
+    return {"ok": True, "moved": shift_range(body.from_, body.to, body.days)}
 
 
 @router.post("/api/unschedule")
-def api_unschedule(body: dict, _=_auth):
-    unschedule_workout(int(body["scheduleId"]))
+def api_unschedule(body: UnscheduleBody, _=_auth):
+    unschedule_workout(body.scheduleId)
     return {"ok": True}
 
 
 @router.post("/api/import")
-def api_import(body: dict, _=_auth):
-    date.fromisoformat(str(body["date"]))
-    store.save_external(str(body["source"]), str(body["date"]), body.get("metrics") or {})
+def api_import(body: ImportBody, _=_auth):
+    store.save_external(body.source, body.date, body.metrics or {})
     return {"ok": True}
 
 
 @router.post("/api/gear")
-def api_gear_post(body: dict, _=_auth):
-    store.set_gear(str(body["key"]), display=body.get("display"),
-                   start_mi=body.get("startMi"), threshold_mi=body.get("thresholdMi"),
-                   retired=body.get("retired"), brand=body.get("brand"),
-                   model=body.get("model"), is_default=body.get("isDefault"))
+def api_gear_post(body: GearBody, _=_auth):
+    store.set_gear(body.key, display=body.display,
+                   start_mi=body.startMi, threshold_mi=body.thresholdMi,
+                   retired=body.retired, brand=body.brand,
+                   model=body.model, is_default=body.isDefault)
     return {"ok": True}
 
 
 @router.post("/api/run/{activity_id}/gear")
-def api_run_gear(activity_id: str, body: dict, _=_auth):
-    store.set_annotation(activity_id[:32], shoes=str(body.get("gearId") or ""))
+def api_run_gear(activity_id: str, body: RunGearBody, _=_auth):
+    store.set_annotation(activity_id[:32], shoes=body.gearId or "")
     return {"ok": True}
 
 
 @router.post("/api/coach/apply")
-def api_coach_apply(body: dict, _=_auth):
-    if body.get("action") == "move":
-        move_workout(int(body["scheduleId"]), int(body["workoutId"]), str(body["to"]))
+def api_coach_apply(body: CoachApplyBody, _=_auth):
+    if body.action == "move":
+        move_workout(body.scheduleId, body.workoutId, body.to)
     else:
-        unschedule_workout(int(body["scheduleId"]))
+        unschedule_workout(body.scheduleId)
     return {"ok": True}
 
 
@@ -211,8 +210,7 @@ def api_sync_calendar(_=_auth):
 
 
 @router.post("/api/annotate")
-def api_annotate(body: dict, _=_auth):
-    store.set_annotation(str(body["activityId"])[:32],
-                         rpe=body.get("rpe"), note=body.get("note"),
-                         shoes=body.get("shoes"))
+def api_annotate(body: AnnotateBody, _=_auth):
+    store.set_annotation(str(body.activityId)[:32],
+                         rpe=body.rpe, note=body.note, shoes=body.shoes)
     return {"ok": True}
