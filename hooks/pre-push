@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Trunk-based safety net: run the test suite before code leaves this machine.
+# This is what keeps broken code off origin/main when there's no PR/branch-
+# protection gate. Blocks the push only on test failure.
+# Override (rarely): git push --no-verify
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$root" || exit 0
+export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$root"
+
+if ! python3 -c "import pytest" >/dev/null 2>&1; then
+  echo "⚠️  pre-push: pytest not available — skipping tests (run: pip install -e \".[dev]\")."
+  exit 0
+fi
+
+echo "pre-push: running tests…"
+if ! python3 -m pytest -q; then
+  echo "✋ Tests failed — push blocked. Fix, or override with: git push --no-verify"
+  exit 1
+fi
+exit 0

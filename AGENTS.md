@@ -85,9 +85,15 @@ ticket, not part of this cleanup.
 
 ## Parallel agents — branches, worktrees, ownership
 
+**Default is trunk-based on `main` (see §6).** Use the worktree/branch
+isolation below **only when two agents actually run at the same time on
+different areas** (e.g. infra in `src/`, product in `app.js`) — then merge as
+soon as `pre-push` tests pass. No PR required. If you're running one agent at
+a time, ignore all of this and just work on `main`.
+
 Multiple agents editing the same files on the same branch **will** collide
-(the `.git/index.lock` contention seen earlier is the symptom). The fix is
-isolation + an integration gate.
+(the `.git/index.lock` contention seen earlier is the symptom). When that's
+the case, isolate:
 
 ### 1. One worktree + one branch per agent (true filesystem isolation)
 Each agent works in its **own checkout** so they never touch each other's
@@ -134,19 +140,27 @@ stays small. A long-lived branch diverging on a 1,400-line monolith is the
 worst case — the redesign is the natural moment to split `app.js` into a
 few modules, which also makes future parallel work conflict-free.
 
-### 6. Enforcement — how this is actually gated
-**Local (installed now):** `hooks/pre-commit`, wired via
-`core.hooksPath=hooks`, **blocks direct commits to `main`** in every clone
-and worktree — agents must branch. Admin/bootstrap override:
-`git commit --no-verify`.
-**See what's awaiting review:** `bash scripts/review-queue.sh` — branches not
-merged into `main`, plus open PRs if `gh` is installed.
-**Server-side (you enable once — repo admin, can't be scripted from here):**
-GitHub → Settings → Branches → protect `main`: ✅ require a PR before merging,
-✅ require status check **CI** to pass, ✅ require Code Owner review.
-`.github/CODEOWNERS` already requests you, so once this is on you are
-**auto-flagged for review on every PR**. Until then, the local hook is the
-guard and GitHub still accepts pushes to `main`.
+### 6. Enforcement — trunk-based with an automated net (not a PR gate)
+This is a **solo** project with parallel agents. The goal is to catch the
+expensive mistakes automatically, **not** to make you a mandatory reviewer.
+So: work directly on `main`; rely on machine checks, not human gates.
+
+**Installed, wired via `core.hooksPath=hooks`:**
+- `hooks/pre-commit` — fast checks on every commit: secret scan
+  (detect-secrets), `ruff` lint, `mypy` type-check. Does **not** block `main`.
+- `hooks/pre-push` — runs `pytest`; blocks the push only if tests fail. This
+  is what keeps broken code off `origin/main` without a PR gate.
+- CI (`.github/workflows/ci.yml`) re-runs all of the above on push.
+Override either hook (rarely): `--no-verify`.
+
+**Review on demand, not by law.** Read a diff when *you* decide it's risky
+(Garmin write path, data layer) — not as a tollbooth on every change.
+
+**Branch protection is intentionally OFF.** `.github/CODEOWNERS` and the
+PR/review flow stay in the repo so you can switch the heavy model back on in
+~2 minutes if a real collaborator or multi-user push ever arrives — but
+until then it's overhead for a team of one. `bash scripts/review-queue.sh`
+still shows any branches in flight.
 
 ---
 

@@ -2,17 +2,11 @@
 # See AGENTS.md. Deliberate bootstrap-only override: git commit --no-verify
 set -e
 
-# --- 1. Block direct commits to main -----------------------------------
-# Agents work on a branch and open a PR so the infra/product work is
-# reviewable before it lands.
-branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-if [ "$branch" = "main" ]; then
-  echo "✋ Direct commits to 'main' are blocked (AGENTS.md › Parallel agents)."
-  echo "   git switch -c feat/<change>   # work on a branch"
-  echo "   then push and open a PR — CI + review gate main."
-  exit 1
-fi
-
+# --- Trunk-based by design (AGENTS.md): this hook does NOT block commits to
+# main. For a solo project with parallel agents, the value is catching the
+# expensive mistakes (leaked secrets, broken types) automatically, not
+# gating every change behind a PR you'd have to review yourself. Tests run
+# on push (hooks/pre-push); branch protection is intentionally OFF.
 staged_py=$(git diff --cached --name-only --diff-filter=ACM -- '*.py' ':!archive/*')
 
 # --- 2. Secret scanning (G5) --------------------------------------------
