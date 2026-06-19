@@ -14,7 +14,9 @@ __pycache__/
 .venv/
 .DS_Store
 timely-backup.db
+timely-backup.db-*
 timely.db*
+intervalsicu_plan/
 .ship_request
 .intervals_request
 .intervals_response.txt
