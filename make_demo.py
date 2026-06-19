@@ -2,22 +2,27 @@
 """Build the portfolio demo: a single static HTML file with the full coach UI
 running on a synthetic athlete — no Garmin account, no backend, no secrets.
 
-Run:    python3 make_demo.py        →  demo/index.html
+Run:    python3 make_demo.py        →  docs/index.html
 
-Deploy: push demo/ anywhere static (GitHub Pages, Vercel, Netlify).
-The demo is generated FROM the real app's UI (coach.PAGE), so it never
+Deploy: GitHub repo Settings → Pages → branch main, folder /docs.
+The demo is generated FROM the real app's UI (main._asset), so it never
 drifts from the product. All /api/* calls are intercepted by a fetch shim
 backed by embedded sample data; moves and vacation mode work (in-memory).
 
 The synthetic athlete is mid-week-6: mostly on-target runs, one missed day,
 one slow tempo, and a short-sleep morning so the readiness banner shows.
+
+Post-refactor note: this used to pull plan_summary()/_asset()/_icon_png()
+off `coach` (the old monolith). coach.py is now a 16-line shim, so those
+live in `main` (_asset, _icon_png) and src.services.plan_svc (plan_summary).
 """
 import json
 import os
 import random
 from datetime import timedelta
 
-import coach
+import main as app_main
+from src.services.plan_svc import plan_summary
 from plan import build_plan, PLAN_START
 
 random.seed(42)
@@ -25,7 +30,7 @@ DEMO_TODAY = PLAN_START + timedelta(days=38)   # Thursday, week 6
 
 
 def build_demo_data():
-    plan_sum = coach.plan_summary()
+    plan_sum = plan_summary()
     plan_sum["today"] = DEMO_TODAY.isoformat()
 
     schedule = []
@@ -203,16 +208,15 @@ SHIM = """const DEMO=%s;
 def main():
     data = build_demo_data()
     shim = "<script>" + SHIM % json.dumps(data) + "</script>\n"
-    ui = coach._asset("ui.html").decode()
-    js = coach._asset("app.js").decode()
+    ui = app_main._asset("ui.html").decode()
+    js = app_main._asset("app.js").decode()
     marker = '<script src="app.js"></script>'
     assert marker in ui, "ui.html layout changed; update make_demo.py"
     html = ui.replace(marker, shim + "<script>\n" + js + "\n</script>")
     html = html.replace('href="/apple-touch-icon.png"', 'href="apple-touch-icon.png"')
     os.makedirs("docs", exist_ok=True)
     with open(os.path.join("docs", "apple-touch-icon.png"), "wb") as f:
-        f.write(coach._icon_png())
-    os.makedirs("docs", exist_ok=True)   # GitHub Pages serves from /docs
+        f.write(app_main._icon_png())
     out = os.path.join("docs", "index.html")
     with open(out, "w") as f:
         f.write(html)

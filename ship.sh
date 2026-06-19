@@ -7,15 +7,16 @@ cd "$(dirname "$0")"
 MSG="${1:-update}"
 
 echo "▶ tests"
-python3 test_upload_garmin.py | tail -1
+python3 -m pytest -q
 
 echo "▶ rebuild demo"
 python3 make_demo.py
 
 echo "▶ commit + push"
-git add builders.py plan.py upload_garmin_workouts.py test_upload_garmin.py \
-        coach.py store.py ui.html app.js make_demo.py docs/ README.md .gitignore \
-        ship.sh lan.sh WRITEUP.md ARCHITECTURE.md ROADMAP.md PRDS.md
+# Explicit add-lists go stale every time the layout changes (this one did,
+# silently, for a week during the FastAPI migration). .gitignore now covers
+# secrets/generated/db files, so a blanket add is the safer default.
+git add -A
 git commit -m "$MSG" || echo "(nothing to commit)"
 git push
 

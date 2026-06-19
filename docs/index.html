@@ -66,6 +66,9 @@
  .banner{border-radius:12px;padding:10px 15px;margin-bottom:14px;font-size:13.5px;display:none}
  .banner.amber{display:block;background:#2c2410;border:1px solid #4d3f1c;color:#f0d28a}
  .banner.red{display:block;background:#2d1515;border:1px solid #553030;color:#f3a9a0}
+ .rpe-btn{flex:1;padding:11px 0;background:var(--cell);border:1px solid var(--line);
+  border-radius:8px;color:var(--dim);font-size:13px;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+ .rpe-btn:hover,.rpe-btn:active{background:#1e2a3a;border-color:var(--accent);color:var(--tx)}
 
  .bar{display:flex;align-items:center;gap:9px;margin-bottom:12px;flex-wrap:wrap}
  .mnav{display:flex;align-items:center;gap:2px;background:var(--panel);
@@ -141,6 +144,10 @@
  .lapbars .b{flex:1;background:var(--good);border-radius:3px 3px 0 0;min-width:3px;opacity:.92;position:relative;z-index:1}
  .lapbars .tband{position:absolute;left:0;right:0;background:rgba(255,255,255,.14);border-radius:3px;z-index:0}
  .chartwrap{position:relative;touch-action:pan-y;overscroll-behavior-x:none;cursor:crosshair}
+ .playhead{position:absolute;top:0;bottom:18px;left:50%;width:1px;background:var(--faint);
+  pointer-events:none;animation:phPulse 2s ease-in-out infinite}
+ .playhead.gone{display:none}
+ @keyframes phPulse{0%,100%{opacity:.15}50%{opacity:.65}}
  .chartwrap svg{display:block;margin-bottom:6px}
  .ctip{position:absolute;background:#222b36;border:1px solid var(--line);border-radius:8px;
   padding:5px 9px;font-size:11.5px;white-space:nowrap;pointer-events:none;display:none;
@@ -223,10 +230,13 @@
  <div class="wstrip" id="wstrip"></div>
  <div class="brief" id="reviewcard" style="display:none;--bcolor:var(--accent)"></div>
  <div class="brief" id="coachcard" style="display:none;--bcolor:var(--accent2)"></div>
+ <div class="panel" id="countdownpanel" style="display:none"></div>
  <div class="banner" id="banner"></div>
  <div class="brief" id="brief" style="display:none"></div>
+ <div class="panel" id="quicklogpanel" style="display:none"></div>
  <div class="panel" id="weekpanel" style="display:none"></div>
  <div class="panel" id="trendpanel" style="display:none"></div>
+ <div class="panel" id="fitformpanel" style="display:none"></div>
  </div>
 
  <div id="v-plan" style="display:none">
@@ -241,6 +251,7 @@
      <button class="ghost" onclick="nav(1)">›</button>
    </div>
    <button onclick="openVacation()">Vacation</button>
+   <button onclick="syncCalendar()" id="syncCalBtn">📅 Sync to Calendar</button>
    <button onclick="load(true)" aria-label="refresh">↻</button>
    <div class="legend">
      <span><i style="background:var(--easy)"></i>Easy</span>
@@ -263,7 +274,9 @@
  </div>
 
  <div id="v-acts" style="display:none">
+ <div class="panel" id="prpanel" style="display:none"></div>
  <div class="panel" id="actpanel"><h3>Activities</h3></div>
+ <div class="panel" id="otheractpanel" style="display:none"></div>
  </div>
 
  <div class="scrim" id="scrim">
@@ -428,8 +441,8 @@ function shoeName(key){
  return g?(g.nickname||g.display):key;
 }
 const IS_MOBILE=matchMedia('(max-width:700px)').matches;
-let S={schedule:[],plan:null,runs:[],weeklyActual:{},wellness:null,month:null,
- undo:null,moveItem:null,selDate:null,
+let S={schedule:[],plan:null,runs:[],weeklyActual:{},wellness:null,fitForm:null,month:null,
+ prs:null,undo:null,moveItem:null,selDate:null,
  planMode:(function(){try{return localStorage.getItem('coachPlanMode')||(IS_MOBILE?'list':'month');}
   catch(e){return 'month';}})()};
 function setPlanMode(m){S.planMode=m;try{localStorage.setItem('coachPlanMode',m);}catch(e){}render();}
@@ -460,10 +473,14 @@ function toast(msg,opts){
 }
 function hideToast(){document.getElementById('toast').style.display='none';}
 const KEY=new URLSearchParams(location.search).get('key')||'';
-async function jget(u){const r=await fetch(u,{headers:{'X-Key':KEY}});const j=await r.json();
+async function jget(u){const r=await fetch(u,{headers:{'X-Key':KEY}});
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok)throw new Error(j.detail||j.error||('HTTP '+r.status));
  if(j.error)throw new Error(j.error);return j;}
 async function jpost(u,b){const r=await fetch(u,{method:'POST',headers:{'X-Key':KEY},body:JSON.stringify(b)});
- const j=await r.json();if(j.error)throw new Error(j.error);return j;}
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok)throw new Error(j.detail||j.error||('HTTP '+r.status));
+ if(j.error)throw new Error(j.error);return j;}
 
 async function load(force){
  try{
@@ -478,15 +495,31 @@ async function load(force){
    S.ann=j.ann||{};if(j.stale)toast('Garmin unreachable — showing locally saved data',{err:1});
    render();}).catch(()=>{});
   jget('/api/wellness').then(j=>{S.wellness=j;render();}).catch(()=>{});
+  jget('/api/fitness_form').then(j=>{S.fitForm=j;render();}).catch(()=>{});
   jget('/api/weather').then(j=>{S.weather=j;render();}).catch(()=>{});
   jget('/api/fitness').then(j=>{S.fit=j;render();}).catch(()=>{});
   jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{});
   jget('/api/trends').then(j=>{S.trends=j;render();}).catch(()=>{});
   jget('/api/review').then(j=>{S.review=j.review;render();}).catch(()=>{});
   jget('/api/coach').then(j=>{S.props=(j.proposals||[]);render();}).catch(()=>{});
+  jget('/api/other_activities').then(j=>{S.otherActs=j.activities||[];render();}).catch(()=>{});
+  jget('/api/prs').then(j=>{S.prs=j;render();}).catch(()=>{});
  }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
 }
 function nav(d){S.month+=d;render();}
+
+async function syncCalendar(){
+ const btn=document.getElementById('syncCalBtn');
+ if(btn){btn.disabled=true;btn.textContent='Syncing…';}
+ try{
+  const r=await jpost('/api/sync_calendar',{});
+  toast(`Calendar synced — ${r.created} added, ${r.updated} updated, ${r.deleted} removed`);
+ }catch(e){
+  toast(e.message,{err:1,sticky:true});
+ }finally{
+  if(btn){btn.disabled=false;btn.textContent='📅 Sync to Calendar';}
+ }
+}
 
 function setView(v){
  S.view=v;
@@ -507,7 +540,13 @@ function readiness(){
  if(today.rhr&&base&&today.rhr-base>=5)flags.push('resting HR +'+(today.rhr-base)+' over your baseline');
  if(today.sleepH!==null&&today.sleepH>0&&today.sleepH<6)flags.push('only '+today.sleepH+'h sleep');
  if(today.bb!==null&&today.bb!==undefined&&today.bb<30)flags.push('Body Battery at '+today.bb);
- return {today:today,base:base,flags:flags,level:flags.length>=2?'red':(flags.length?'amber':'ok')};
+ const ff=S.fitForm;
+ if(ff&&ff.hrvReadiness&&ff.hrvReadiness.baseline>0){
+  const pct=(ff.hrvReadiness.recent-ff.hrvReadiness.baseline)/ff.hrvReadiness.baseline*100;
+  if(pct<=-10)flags.push('HRV '+Math.round(Math.abs(pct))+'% below your 60-day baseline');
+ }
+ if(ff&&ff.formToday!==undefined&&ff.formToday<-20)flags.push('training form at '+ff.formToday+' (carrying real fatigue)');
+ return {today:today,base:base,flags:flags,level:flags.length>=2?'red':(flags.length?'amber':'ok'),fitForm:ff};
 }
 
 function render(){
@@ -527,12 +566,17 @@ function render(){
  renderReview();
  renderCoach();
  renderBrief(today);
+ renderQuickLog(today);
  renderTrends();
+ renderFitForm();
+ renderCountdown();
  renderPlanTab(today);
  renderWeek(today);
  renderChart();
  renderRamp(wk);
+ renderPRs();
  renderActs();
+ renderOtherActs();
 }
 
 function renderPlanTab(today){
@@ -632,12 +676,21 @@ function renderActs(){
  if(flt!=='All')runs=runs.filter(r=>runKind(r)===flt);
  if(S.fit&&S.fit.current){
   const gap=S.fit.goalGap,onTrack=gap<=0;
+  const vo2=(S.fitForm&&S.fitForm.vo2max&&S.fitForm.vo2max.length)?
+   S.fitForm.vo2max[S.fitForm.vo2max.length-1].v:null;
   h+='<div style="background:var(--cell);border-radius:12px;padding:11px 14px;margin:4px 0 10px">'+
    '<b>Fitness check:</b> VDOT '+S.fit.current+' → projects a <b style="color:'+
    (onTrack?'var(--good)':'var(--tempo)')+'">'+S.fit.marathon+'</b> marathon '+
    (onTrack?'— ahead of sub-3:25':'— '+Math.round(Math.abs(gap)/60)+' min off sub-3:25 (training-run floor; races read faster)')+
-   '<div style="color:var(--faint);font-size:11.5px;margin-top:3px">Estimated from your training runs via Daniels VDOT — the trend matters more than the number.</div></div>';
+   (vo2?' <span style="color:var(--faint)">· Suunto VO2max '+vo2+'</span>':'')+
+   '<div style="color:var(--faint);font-size:11.5px;margin-top:3px">Estimated from your training runs via Daniels VDOT — the trend matters more than the number.</div>'+
+   (S.fit.efTrendPct!=null?'<div style="font-size:11.5px;margin-top:4px;color:'+
+    (S.fit.efTrendPct>=0?'var(--good)':'var(--tempo)')+'">Efficiency (pace per heartbeat) '+
+    (S.fit.efTrendPct>=0?'up ':'down ')+Math.abs(S.fit.efTrendPct)+
+    '% vs prior weeks — '+(S.fit.efTrendPct>=0?'an early sign fitness is building':'worth watching')+
+    ', independent of VDOT.</div>':'')+'</div>';
  }
+ const prAids=new Set(Object.values(S.prs||{}).map(p=>String(p.activityId||'')).filter(Boolean));
  let lastWk=null;
  runs.forEach(r=>{
   const wk=Math.floor((parse(r.date)-parse(S.plan.start))/DAY/7)+1;
@@ -651,6 +704,7 @@ function renderActs(){
   const title=escapeHTML((it?it.title:r.name).replace(/^W\d+ \w+ /,''));
   const a=it?assess(it):null;
   const col=a?(a.distOk&&a.paceOk!==false?'var(--good)':'var(--tempo)'):'var(--dim)';
+  const isPR=prAids.has(String(r.activityId));
   h+='<div onclick="openRun(\''+r.activityId+'\',\''+(it?it.title:'')+'\')"'+
    ' style="display:flex;gap:11px;align-items:center;padding:10px 0;border-top:1px solid var(--line);cursor:pointer">'+
    '<div style="width:9px;height:9px;border-radius:5px;flex:none;background:var(--'+
@@ -661,9 +715,35 @@ function renderActs(){
    '<div style="text-align:right"><b>'+r.mi.toFixed(1)+' mi</b>'+
    '<div style="color:'+col+';font-size:12px">'+(r.pace?r.pace+'/mi':'')+
      (a&&a.paceMsg?' · '+a.paceMsg:'')+'</div></div>'+
+   (isPR?'<span style="font-size:15px" title="Personal record">🏆</span>':'')+
+   (r.compliance!=null?'<span style="background:var(--cell);border:1px solid var(--line);border-radius:999px;'+
+    'padding:3px 8px;font-size:11px;color:'+(r.compliance>=85?'var(--good)':'var(--tempo)')+'">'+
+    Math.round(r.compliance)+'%</span>':'')+
    (((S.ann||{})[String(r.activityId)]||{}).rpe?
     '<span style="background:var(--cell);border:1px solid var(--line);border-radius:999px;'+
     'padding:3px 8px;font-size:11px;color:var(--dim)">RPE '+S.ann[String(r.activityId)].rpe+'</span>':'')+
+   '<span style="color:var(--faint)">›</span></div>';
+ });
+ el.innerHTML=h;
+}
+
+const sportIcon={Ride:'🚴',VirtualRide:'🚴',Swim:'🏊',WeightTraining:'🏋️',
+ Workout:'🏋️',Walk:'🚶',Hike:'🥾',Yoga:'🧘',RockClimbing:'🧗',Rowing:'🚣'};
+function renderOtherActs(){
+ const el=document.getElementById('otheractpanel');
+ const acts=(S.otherActs||[]).slice(0,15);
+ if(!acts.length){el.style.display='none';return;}
+ el.style.display='';
+ let h='<h3>Other activities <span style="color:var(--dim);font-weight:400">— cross-training synced from your watch</span></h3>';
+ acts.forEach(a=>{
+  h+='<div onclick="openRun(\''+a.activityId+'\',\'\')" style="display:flex;gap:11px;align-items:center;'+
+   'padding:10px 0;border-top:1px solid var(--line);cursor:pointer">'+
+   '<div style="font-size:18px;flex:none">'+(sportIcon[a.type]||'⚡')+'</div>'+
+   '<div style="flex:1;min-width:0"><b>'+escapeHTML(a.name)+'</b>'+
+   '<div style="color:var(--dim);font-size:12px">'+a.type+' · '+
+    parse(a.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'</div></div>'+
+   '<div style="text-align:right"><b>'+(a.durationSec?fmtDur(a.durationSec):'—')+'</b>'+
+   (a.avgHr?'<div style="color:var(--dim);font-size:12px">avg HR '+a.avgHr+'</div>':'')+'</div>'+
    '<span style="color:var(--faint)">›</span></div>';
  });
  el.innerHTML=h;
@@ -755,6 +835,141 @@ function renderTrends(){
    (d>0?'▲':'▼')+fmtPace(Math.abs(d))+'</span></span></div>'+sparkSvg(vs,'#5DCAA5');
  }
  h+='<div style="color:var(--faint);font-size:11px;margin-top:6px">RHR down = adapting · easy pace down at the same effort = fitness</div>';
+ if(t.sleepPerf&&(t.sleepPerf.good||t.sleepPerf.poor)){
+  const g=t.sleepPerf.good,p=t.sleepPerf.poor;
+  const diff=(g&&p)?p.avgPace-g.avgPace:null;
+  h+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">'+
+   '<div style="color:var(--dim);font-size:13px;margin-bottom:6px">Sleep vs pace</div>'+
+   (g?'<div style="display:flex;justify-content:space-between;font-size:12.5px;margin:3px 0">'+
+    '<span>7h+ sleep <span style="color:var(--faint)">('+g.n+' runs)</span></span>'+
+    '<b style="color:var(--good)">'+g.paceStr+'/mi</b></div>':'')+
+   (p?'<div style="display:flex;justify-content:space-between;font-size:12.5px;margin:3px 0">'+
+    '<span>Under 7h <span style="color:var(--faint)">('+p.n+' runs)</span></span>'+
+    '<b style="color:var(--tempo)">'+p.paceStr+'/mi</b></div>':'')+
+   (diff!=null&&Math.abs(diff)>=5?'<div style="color:var(--faint);font-size:11px;margin-top:4px">'+
+    Math.round(Math.abs(diff))+'s/mi difference — sleep is training too</div>':'')+'</div>';
+ }
+ el.innerHTML=h;el.style.display='block';
+}
+
+function renderFitForm(){
+ const el=document.getElementById('fitformpanel'),f=S.fitForm;
+ if(!el)return;
+ if(!f||(!f.ctlAtl&&!f.hrv&&!f.vo2max)){el.style.display='none';return;}
+ let h='<h3>Fitness &amp; Form</h3>';
+ if(f.ctlAtl&&f.ctlAtl.length>=3){
+  const last=f.ctlAtl[f.ctlAtl.length-1];
+  const formCol=last.form>0?'var(--good)':(last.form<-10?'var(--hard)':'var(--tempo)');
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px">'+
+   '<span style="color:var(--dim);font-size:13px">Form (CTL '+last.ctl.toFixed(0)+' &minus; ATL '+last.atl.toFixed(0)+')</span>'+
+   '<span style="color:'+formCol+'"><b>'+(last.form>0?'+':'')+last.form.toFixed(1)+'</b></span></div>'+
+   sparkSvg(f.ctlAtl.map(x=>x.form),'#3ec6c0')+
+   '<div style="color:var(--faint);font-size:11px;margin-top:2px">Positive = fresh, ready for a hard effort. '+
+   'Sustained negative = carrying fatigue — expected mid-block, a flag if it lingers into a quality week.</div>';
+ }
+ if(f.hrv&&f.hrv.length>=5){
+  const vs=f.hrv.map(x=>x.v),last=vs[vs.length-1];
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:10px">'+
+   '<span style="color:var(--dim);font-size:13px">HRV</span><span><b>'+last+'</b>'+
+   (f.hrvReadiness?' <span style="font-size:11.5px;color:var(--faint)">(60d avg '+f.hrvReadiness.baseline+')</span>':'')+
+   '</span></div>'+sparkSvg(vs,'#9d7cd8');
+ }
+ if(f.vo2max&&f.vo2max.length>=2){
+  const vs=f.vo2max.map(x=>x.v),last=vs[vs.length-1];
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:10px">'+
+   '<span style="color:var(--dim);font-size:13px">VO2max (Suunto est.)</span><span><b>'+last+'</b></span></div>'+
+   (vs.length>=3?sparkSvg(vs,'#e0af68'):'');
+ }
+ el.innerHTML=h;el.style.display='block';
+}
+
+function renderCountdown(){
+ const el=document.getElementById('countdownpanel'),f=S.fit;
+ if(!el)return;
+ if(!f||!f.daysToRace||!f.marathon){el.style.display='none';return;}
+ const days=f.daysToRace,onTrack=f.goalGap<=0;
+ const gapMin=Math.round(Math.abs(f.goalGap)/60);
+ const gapStr=onTrack?'<span style="color:var(--good)">On track for sub-3:25 ✓</span>':
+  '<span style="color:var(--tempo)">'+gapMin+' min behind sub-3:25</span>';
+ el.innerHTML=
+  '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
+  '<div>'+
+   '<div style="font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.7px">Marine Corps Marathon</div>'+
+   '<div style="font-size:28px;font-weight:700;line-height:1.1;margin:2px 0">'+days+'<span style="font-size:14px;font-weight:400;color:var(--dim)"> days</span></div>'+
+   '<div style="font-size:12px;color:var(--dim)">Oct 25, 2026</div>'+
+  '</div>'+
+  '<div style="text-align:right">'+
+   '<div style="font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.7px">Current projection</div>'+
+   '<div style="font-size:24px;font-weight:700;color:'+(onTrack?'var(--good)':'var(--accent)')+'">'+f.marathon+'</div>'+
+   '<div style="font-size:12px;margin-top:2px">'+gapStr+'</div>'+
+  '</div></div>'+
+  '<div style="font-size:11px;color:var(--faint);margin-top:6px">Based on recent training runs via Daniels VDOT · updates each run</div>';
+ el.style.display='block';
+}
+
+function renderQuickLog(today){
+ const el=document.getElementById('quicklogpanel');
+ if(!el)return;
+ // Only show once actuals have loaded (S.ann defined) and today has an unlogged run
+ if(!S.ann){el.style.display='none';return;}
+ const run=(S.runs||[]).find(r=>r.date===today&&r.activityId);
+ if(!run||(S.ann[String(run.activityId)]||{}).rpe){el.style.display='none';return;}
+ const mi=run.mi.toFixed(1);
+ // Shoe default
+ const known=(S.gear||[]).filter(g=>!g.retired);
+ const def=known.find(g=>g.isDefault);
+ const defKey=def?def.key:'';
+ // RPE bands: value logged = lower bound of pair
+ const bands=[[1,'1–2','Recovery'],[3,'3–4','Easy'],[5,'5–6','Moderate'],[7,'7–8','Hard'],[9,'9–10','Max']];
+ let h='<div style="font-size:13px;color:var(--dim);margin-bottom:10px">How did today\'s <b style="color:var(--tx)">'+mi+' mi</b> feel?</div>'+
+  '<div style="display:flex;gap:6px;margin-bottom:12px">';
+ bands.forEach(([v,label,name])=>{
+  h+='<button class="rpe-btn" onclick="quickLogRpe('+run.activityId+','+v+')" title="'+name+'">'+label+'</button>';
+ });
+ h+='</div>';
+ if(known.length){
+  h+='<select id="qlShoes" style="width:100%;background:var(--cell);border:1px solid var(--line);'+
+   'color:var(--tx);border-radius:9px;padding:10px 11px;font-size:15px">'+
+   '<option value="">Shoes — none logged</option>';
+  known.forEach(g=>{h+='<option value="'+escapeHTML(g.key)+'"'+(defKey===g.key?' selected':'')+'>'+
+   escapeHTML(g.nickname||g.display)+(g.isDefault?' · default':'')+'</option>';});
+  h+='</select>';
+ }
+ el.innerHTML=h;el.style.display='block';
+}
+async function quickLogRpe(aid,rpe){
+ const sel=document.getElementById('qlShoes');
+ const shoes=sel?sel.value:'';
+ try{
+  await jpost('/api/annotate',{activityId:aid,rpe:rpe,note:'',shoes:shoes});
+  S.ann=S.ann||{};S.ann[String(aid)]={rpe:rpe,note:'',shoes:shoes};
+  document.getElementById('quicklogpanel').style.display='none';
+  toast('Logged '+rpe+' · '+rpeName(rpe)+(shoes?' + shoes':''));
+  jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{render();});
+ }catch(e){toast('Save failed: '+e.message,{err:1});}
+}
+
+function renderPRs(){
+ const el=document.getElementById('prpanel'),p=S.prs;
+ if(!el)return;
+ if(!p||!Object.keys(p).length){el.style.display='none';return;}
+ const labels={mile:'Best mile pace',
+  '5k':'Best 5K pace',
+  '10k':'Best 10K pace',
+  half:'Best half pace',
+  long:'Longest run'};
+ let h='<h3>Personal Records</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">';
+ const order=['mile','5k','10k','half','long'];
+ order.forEach(k=>{
+  const r=p[k];if(!r)return;
+  const val=k==='long'?r.mi.toFixed(1)+' mi':(r.paceStr+'/mi');
+  const d=r.date?new Date(r.date+'T12:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'2-digit'}):'';
+  h+='<div onclick="openRun(\''+r.activityId+'\',\'\')" style="background:var(--cell);border-radius:10px;padding:10px 12px;cursor:pointer">'+
+   '<div style="font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.5px">'+labels[k]+'</div>'+
+   '<div style="font-size:20px;font-weight:700;margin:2px 0">'+val+'</div>'+
+   '<div style="font-size:11px;color:var(--dim)">'+d+(r.mi&&k!=='long'?' · '+r.mi.toFixed(1)+' mi run':'')+'</div></div>';
+ });
+ h+='</div>';
  el.innerHTML=h;el.style.display='block';
 }
 
@@ -801,10 +1016,13 @@ function renderBrief(today){
    (bigRun?'<span class="donechip">✓ '+bigRun.mi.toFixed(1)+' mi unplanned</span>':wx)+'</div>';
  }
  if(isToday&&r&&r.today){
+  const ff=r.fitForm;
   h+='<div class="ready">'+
    (r.today.rhr?'<span>RHR <b>'+r.today.rhr+'</b>'+(r.base?' <span style="color:var(--faint)">(7-day '+r.base+')</span>':'')+'</span>':'')+
    (r.today.sleepH?'<span>Sleep <b>'+r.today.sleepH+'h</b></span>':'')+
    ((r.today.bb!==null&&r.today.bb!==undefined)?'<span>Body Battery <b>'+r.today.bb+'</b></span>':'')+
+   ((ff&&ff.formToday!==undefined)?'<span>Form <b>'+(ff.formToday>0?'+':'')+ff.formToday+'</b></span>':'')+
+   ((r.today.hrv!==null&&r.today.hrv!==undefined)?'<span>HRV <b>'+r.today.hrv+'</b></span>':'')+
    (r.level==='ok'?'<span style="color:var(--good)">● ready</span>':'')+'</div>';
  }
  const hp=(S.weather&&S.weather.heatPct)||0;
@@ -824,16 +1042,41 @@ function renderBrief(today){
   '</div>';
  br.innerHTML=h;br.style.display='block';
  const todayItem=S.schedule.filter(i=>i.date===today)[0];
- if(r&&r.flags.length&&todayItem&&isHard(todayItem.title)&&!runsOn(today).length){
-  bn.className='banner '+(r.level==='red'?'red':'amber');
-  bn.textContent=(r.level==='red'?'Rough recovery: ':'Heads up: ')+r.flags.join(', ')+
-   '. Today is a quality day — consider swapping it with an easy day. One moved workout beats one forced injury.';
+ const showBanner=r&&r.flags.length&&isToday&&todayItem&&isHard(todayItem.title)&&!runsOn(today).length&&!S.bannerDismissed;
+ if(showBanner){
+  const isRed=r.level==='red';
+  bn.className='banner '+(isRed?'red':'amber');
+  const label=todayItem.title.replace(/^W\d+ \w+ /,'');
+  if(isRed){
+   bn.innerHTML='<b>Rough recovery detected</b> · '+r.flags.join(', ')+
+    '<div style="margin:7px 0 10px;font-size:13px;opacity:.9">Today is a quality day (<b>'+escapeHTML(label)+'</b>).'+
+    ' A forced injury delays the plan more than one moved workout.</div>'+
+    '<div style="display:flex;gap:8px">'+
+    '<button class="primary" onclick="bannerMove('+todayItem.scheduleId+','+todayItem.workoutId+',\''+today+'\')">Move to next clear day ▸</button>'+
+    '<button onclick="bannerDismiss()">Dismiss</button></div>';
+  }else{
+   bn.innerHTML='<b>Heads up:</b> '+r.flags.join(', ')+' — today is a quality day (<b>'+escapeHTML(label)+'</b>).'+
+    ' <button style="margin-left:8px" onclick="bannerMove('+todayItem.scheduleId+','+todayItem.workoutId+',\''+today+'\')">Move it ▸</button>'+
+    ' <button onclick="bannerDismiss()" style="margin-left:4px">✕</button>';
+  }
  }
- if(r&&r.flags.length&&isToday&&isHard(next.title)){
-  bn.className='banner '+(r.level==='red'?'red':'amber');
-  bn.textContent=(r.level==='red'?'Rough recovery: ':'Heads up: ')+r.flags.join(', ')+
-   '. Today is a quality day — consider swapping it with an easy day (drag it on the calendar). One moved workout beats one forced injury.';
- }
+}
+async function bannerMove(scheduleId,workoutId,fromDate){
+ const bn=document.getElementById('banner');
+ if(bn)bn.innerHTML='<i>Finding next clear day…</i>';
+ try{
+  const s=await jget('/api/suggest_move?scheduleId='+scheduleId+'&fromDate='+fromDate);
+  if(!s.to){toast('No clear slot found in the next 10 days',{err:1});return;}
+  await jpost('/api/move',{scheduleId:scheduleId,workoutId:workoutId,date:s.to});
+  S.bannerDismissed=true;
+  toast('Moved to '+(s.toLabel||s.to));
+  const d=await jget('/api/data');
+  S.plan=d.plan;S.schedule=d.schedule;render();
+ }catch(e){toast('Move failed: '+e.message,{err:1});}
+}
+function bannerDismiss(){
+ S.bannerDismissed=true;
+ document.getElementById('banner').className='banner';
 }
 
 function renderGrid(today){
@@ -1118,7 +1361,7 @@ let CUR_AID=null,CUR_RPE=null;
 async function openRun(aid,title){
  CUR_AID=aid;CUR_RPE=((S.ann||{})[String(aid)]||{}).rpe||null;
  const m=document.getElementById('rmodal');
- m.innerHTML='<div class="skel" style="padding:60px 20px"><i></i>Loading run from Garmin…</div>';
+ m.innerHTML='<div class="skel" style="padding:60px 20px"><i></i>Loading run…</div>';
  document.getElementById('rscrim').classList.add('show');
  let j;
  try{j=await jget('/api/run/'+aid);}
@@ -1136,10 +1379,43 @@ function paceCol(t){
  const a=[93,202,165],b=[240,153,123];
  return 'rgb('+a.map((v,k)=>Math.round(v+(b[k]-v)*t)).join(',')+')';
 }
+function hrCol(t){
+ // blue (easy) → red (hard)
+ t=Math.max(0,Math.min(1,t));
+ const a=[80,140,220],b=[240,80,80];
+ return 'rgb('+a.map((v,k)=>Math.round(v+(b[k]-v)*t)).join(',')+')';
+}
+let mapMode='pace'; // 'pace' or 'hr'
+function setMapMode(m){mapMode=m;const el=document.getElementById('routewrap');if(el)el.innerHTML=routeSvgX(RS._rt)+mapControls();}
+function mapControls(){
+ const hp=RS.hr&&RS.hr.some(x=>x!=null);
+ if(!hp)return'';
+ return '<div style="display:flex;align-items:center;gap:8px;margin-top:6px">'+
+  '<span style="font-size:11px;color:var(--faint)">Color by</span>'+
+  ['pace','hr'].map(m=>'<button onclick="setMapMode(\''+m+'\')" style="padding:3px 10px;font-size:11px'+
+   (mapMode===m?';background:var(--accent);color:#000;border-color:var(--accent)':'')+
+   '">'+m+'</button>').join('')+
+  '<span style="flex:1"></span>'+legendSvg()+'</div>';
+}
+function legendSvg(){
+ const stops=8,W=80,H=8;
+ let bars='';
+ for(let i=0;i<stops;i++){
+  const t=i/(stops-1);
+  const c=mapMode==='hr'?hrCol(t):paceCol(t);
+  bars+='<rect x="'+(i*W/stops).toFixed(1)+'" y="0" width="'+(W/stops+1).toFixed(1)+'" height="'+H+'" fill="'+c+'"/>';
+ }
+ const lo=mapMode==='hr'?'easy HR':'fast',hi=mapMode==='hr'?'hard HR':'slow';
+ return '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--faint)">'+
+  '<span>'+lo+'</span>'+
+  '<svg viewBox="0 0 '+W+' '+H+'" style="width:50px;height:8px;border-radius:3px;overflow:hidden">'+bars+'</svg>'+
+  '<span>'+hi+'</span></div>';
+}
 function rx(i){return RPAD+(RS.d[i]/RS.d[RS.n-1])*(RW-2*RPAD);}
 
 function routeSvgX(rt){
- if(!rt||rt.length<8){RS.rpts=null;return'';}
+ if(!rt||rt.length<8){RS.rpts=null;RS._rt=null;return'';}
+ RS._rt=rt;
  const lats=rt.map(p=>p[0]),lons=rt.map(p=>p[1]);
  const la0=Math.min(...lats),la1=Math.max(...lats),lo0=Math.min(...lons),lo1=Math.max(...lons);
  const H=170,kx=Math.cos((la0+la1)/2*Math.PI/180);
@@ -1148,16 +1424,20 @@ function routeSvgX(rt){
  const ox=(RW-spanX*sc)/2,oy=(H-spanY*sc)/2;
  const pts=rt.map(p=>[ox+((p[1]-lo0)*kx)*sc,oy+(la1-p[0])*sc]);
  RS.rpts=pts;
- // pace-colored segments: see where you surged and where you faded
- const ps=(RS.pace||[]).filter(x=>x!=null).slice().sort((a,b)=>a-b);
- const p10=ps[Math.floor(ps.length*0.1)]||0,p90=ps[Math.floor(ps.length*0.9)]||1;
+ const useHr=mapMode==='hr'&&RS.hr&&RS.hr.some(x=>x!=null);
+ const vals=useHr?RS.hr:RS.pace;
+ const sorted=(vals||[]).filter(x=>x!=null).slice().sort((a,b)=>a-b);
+ const v10=sorted[Math.floor(sorted.length*0.1)]||0,v90=sorted[Math.floor(sorted.length*0.9)]||1;
+ const colFn=useHr?hrCol:paceCol;
  const step=Math.max(1,Math.floor(pts.length/56));
  let segs='';
  for(let i=0;i<pts.length-1;i+=step){
   const j=Math.min(pts.length-1,i+step);
   const si=Math.round(i/(pts.length-1)*(RS.n-1));
-  const pv=RS.pace[si];
-  const col=(pv!=null&&p90>p10)?paceCol((pv-p10)/(p90-p10)):'#3ec6c0';
+  const pv=vals[si];
+  // for pace: higher=slower=warmer; for HR: higher=harder=warmer — both map t=0→fast/easy
+  const t=(pv!=null&&v90>v10)?(pv-v10)/(v90-v10):0.5;
+  const col=colFn(useHr?t:t);
   segs+='<polyline points="'+pts.slice(i,j+1).map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')+
    '" fill="none" stroke="'+col+'" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>';
  }
@@ -1267,7 +1547,10 @@ function initRunUX(){
   const frac=(fx-RPAD)/(RW-2*RPAD);
   return Math.max(0,Math.min(RS.n-1,Math.round(frac*(RS.n-1))));
  };
- box.addEventListener('pointerdown',e=>{RS.drag={x:e.clientX,i:fracIdx(e),t:e.pointerType};});
+ box.addEventListener('pointerdown',e=>{
+  const ph=document.getElementById('chartPlayhead');if(ph)ph.classList.add('gone');
+  RS.drag={x:e.clientX,i:fracIdx(e),t:e.pointerType};
+ });
  box.addEventListener('pointermove',e=>{
   const i=fracIdx(e);
   if(RS.drag&&RS.drag.t==='mouse'&&e.buttons&&Math.abs(e.clientX-RS.drag.x)>10)setSel(RS.drag.i,i,null);
@@ -1299,11 +1582,14 @@ function zonesHtml(){
 
 function renderRun(j,target,title){
  const s=j.summary||{},laps=j.laps||[],ser=j.series||{};
- RS={d:ser.d||[],pace:ser.pace||[],hr:ser.hr||[],elev:ser.elev||[],
+ RS={d:ser.d||[],pace:ser.pace||[],hr:ser.hr||[],elev:ser.elev||[],gap:ser.gap||[],
      laps:laps,n:(ser.d||[]).length,durSec:s.durSec||0,maxHr:s.maxHr,
      sel:null,selLap:null,charts:[],rpts:null,drag:null};
- let h='<h3>'+escapeHTML(title||s.name)+'</h3><p>'+escapeHTML(s.name)+'</p>';
- h+=routeSvgX(j.route);
+ let h='<h3>'+escapeHTML(title||s.name)+'</h3><p>'+escapeHTML(s.name)+
+  (s.compliance!=null?' <span style="color:'+(s.compliance>=85?'var(--good)':'var(--tempo)')+
+   '">· '+Math.round(s.compliance)+'% plan match</span>':'')+'</p>';
+ mapMode='pace';
+ h+='<div id="routewrap">'+routeSvgX(j.route)+mapControls()+'</div>';
  const fastLaps=laps.filter(l=>l.mi>=0.9).map(l=>l.paceSec);
  h+='<div class="statgrid">'+
   '<div><b>'+(s.mi!=null?s.mi.toFixed(2):'—')+'</b><span>miles</span></div>'+
@@ -1314,7 +1600,10 @@ function renderRun(j,target,title){
   '<div><b>'+(s.cad?Math.round(s.cad)+'':'—')+'</b><span>cadence</span></div>'+
   '<div><b>'+(s.elevFt!=null?s.elevFt+'′':'—')+'</b><span>elev gain</span></div>'+
   '<div><b>'+(fastLaps.length?fmtPace(Math.min.apply(null,fastLaps)):'—')+'</b><span>best split</span></div>'+
-  '<div><b>'+(RS.n?RS.d[RS.n-1].toFixed(1):'—')+'</b><span>gps mi</span></div></div>';
+  '<div><b>'+(RS.n?RS.d[RS.n-1].toFixed(1):'—')+'</b><span>gps mi</span></div>'+
+  (s.gapSec!=null?'<div><b>'+fmtPace(s.gapSec)+'</b><span>adj pace</span></div>':'')+
+  (s.hrRecovery!=null?'<div><b>'+s.hrRecovery+'</b><span>hr recovery</span></div>':'')+
+  '</div>';
  if(laps.length>1){
   // laps vs target: bar height ∝ speed, white band = target pace range
   const v=laps.map(l=>1/l.paceSec);
@@ -1349,7 +1638,10 @@ function renderRun(j,target,title){
   if(RS.pace.some(x=>x!=null)){h+=chartX('pc',RS.pace,86,'#3ec6c0',true);RS.charts.push('pc');}
   if(RS.hr.some(x=>x!=null)){h+=chartX('hr',RS.hr,70,'#ff6b6b',false);RS.charts.push('hr');}
   if(RS.elev&&RS.elev.some(x=>x!=null)){h+=chartX('el',RS.elev,52,'#5b8db8',false);RS.charts.push('el');}
-  h+='<div class="ctip" id="ctip"></div></div>';
+  h+='<div class="playhead" id="chartPlayhead"></div>'+
+     '<div class="ctip" id="ctip"></div></div>';
+  const isTouch='ontouchstart' in window||navigator.maxTouchPoints>0;
+  if(isTouch)h+='<div style="text-align:center;font-size:12px;color:var(--faint);margin:-2px 0 10px">Slide to analyze pace and HR</div>';
   h+=zonesHtml();
  }
  const ann=(S.ann||{})[String(CUR_AID)]||{};
