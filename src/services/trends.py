@@ -1,6 +1,7 @@
 """Trends and week review service."""
 from __future__ import annotations
 from datetime import date, timedelta
+from typing import Optional
 
 import store
 from plan import PLAN_START
@@ -56,7 +57,7 @@ def fetch_trends() -> dict:
     return out
 
 
-def build_week_review(week: int | None = None) -> dict | None:
+def build_week_review(week: Optional[int] = None) -> Optional[dict]:
     """One honest sentence about the training week, computed from the store."""
     today = date.today()
     if week is None:

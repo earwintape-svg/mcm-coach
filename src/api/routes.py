@@ -33,10 +33,10 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Auth dependency
 # ---------------------------------------------------------------------------
-_ACCESS_KEY: str | None = None
+_ACCESS_KEY: Optional[str] = None
 
 
-def set_access_key(key: str | None):
+def set_access_key(key: Optional[str]):
     global _ACCESS_KEY
     _ACCESS_KEY = key
 

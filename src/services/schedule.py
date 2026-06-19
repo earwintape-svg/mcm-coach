@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 from datetime import date, timedelta
+from typing import Optional
 
 import store
 from plan import PLAN_START
@@ -83,7 +84,7 @@ def shift_range(date_from: str, date_to: str, days: int) -> int:
 
 
 def next_clean_slot(sched: list, exclude_id: int, from_day: date,
-                    prefer_weekend: bool = False) -> str | None:
+                    prefer_weekend: bool = False) -> Optional[str]:
     """First open day after from_day with no adjacent hard workout."""
     occupied = {s["date"] for s in sched if s["scheduleId"] != exclude_id}
     hard = {s["date"] for s in sched

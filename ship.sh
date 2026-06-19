@@ -13,10 +13,18 @@ echo "▶ rebuild demo"
 python3 make_demo.py
 
 echo "▶ commit + push"
-# Explicit add-lists go stale every time the layout changes (this one did,
-# silently, for a week during the FastAPI migration). .gitignore now covers
-# secrets/generated/db files, so a blanket add is the safer default.
-git add -A
+# Named files only -- never `git add -A` (AGENTS.md hard rule: the working
+# tree accumulates stray artifacts -- .fuse_hidden*, *.egg-info/, backups --
+# that a blanket add would happily commit). This list went stale once
+# already (silently, for a week, during the FastAPI migration) by omission
+# rather than by this rule -- the fix is updating it when the top-level
+# layout changes, not switching to -A.
+git add main.py coach.py plan.py builders.py upload_garmin_workouts.py \
+        store.py intervalsicu_read.py setup_gcal.py make_demo.py \
+        src/ tests/ docs/ ui.html app.js \
+        requirements.txt pyproject.toml .gitignore .env.example \
+        README.md ARCHITECTURE.md \
+        ship.sh lan.sh .github/
 git commit -m "$MSG" || echo "(nothing to commit)"
 git push
 

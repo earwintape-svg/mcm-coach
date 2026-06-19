@@ -16,6 +16,7 @@ import webbrowser
 import zlib
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, Response
@@ -27,7 +28,7 @@ from src.services.notify import run_watcher, backup_loop
 # ---------------------------------------------------------------------------
 # App icon (pure stdlib PNG — no Pillow, no asset files, can't go missing)
 # ---------------------------------------------------------------------------
-_ICON: bytes | None = None
+_ICON: Optional[bytes] = None
 
 
 def _icon_png() -> bytes:
@@ -148,7 +149,7 @@ def index():
 # ---------------------------------------------------------------------------
 # CLI entry point (used by coach.py shim and lan.sh notify)
 # ---------------------------------------------------------------------------
-def lan_ip() -> str | None:
+def lan_ip() -> Optional[str]:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
