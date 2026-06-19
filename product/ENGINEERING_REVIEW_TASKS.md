@@ -1,9 +1,31 @@
-# timely — Engineering Review & Task Brief (rev. 2)
+# timely — Engineering Review & Task Brief (rev. 4)
 
 **From:** Eng Manager (review prep)
-**For:** Senior dev agents executing fixes
-**Updated:** 2026-06-19 — open questions resolved; secret-leak risk added as the first action.
-**Repo state when written:** mid-refactor (stdlib `coach.py` → FastAPI `main.py` + `src/`). HEAD is still at the June 12 commit; a week of working, test-passing code (`src/`, `main.py`, `tests/`, tonight's gcal work) is **uncommitted**. A second agent may be editing concurrently — re-read files before acting.
+**For:** the **infra engineer** (backend / infra / data). Front-end work lives in `FRONTEND_REDESIGN_TASKS.md` (the **product engineer**).
+**Updated:** 2026-06-19 — T0–T7 reviewed and approved; next batch + role split below.
+
+---
+
+## ▶ NEXT FOCUS (rev. 4 — infra engineer, read this first)
+
+**Status: T0–T7 are done and APPROVED.** Reviewed and verified by the EM: the OAuth secret never entered git history; the refactor went in as clean, ticket-tagged commits; CI is pinned to 3.9; Pydantic models correctly use `Optional`/`Union` (never `X | Y`); all **six** `X | None` landmines defused; web-layer auth + 422 validation tests added (`tests/test_api.py`, using `TestClient` without the lifespan context — nice catch); versioned schema migrations with a legacy-DB upgrade test. **I ran the full suite: 77 passed.** Strong work — including finding the four extra landmine sites and self-correcting the `git add -A` slip in `ship.sh`.
+
+**T8 (XSS) has moved off your plate.** It's the product engineer's now, folded into the redesign — they're rewriting `app.js` anyway. **Do not touch `app.js` / `ui.html`.**
+
+**Your next batch, in order:**
+
+1. **Stand up the multi-agent pipeline first — it unblocks everyone.** Implement the worktree/branch model in `AGENTS.md`: protect `main`, require PR + green CI to merge. You own `.github/`. Until this exists you and the product engineer both commit to `main` and collide — the `index.lock` contention is already happening.
+2. **G1 + G2 — backups that actually protect the data.** `backup()` currently overwrites a single file (a corruption silently destroys your only copy). Add rolling timestamped snapshots (retain ~14 daily / 8 weekly), ensure ≥1 copy lands off-machine, and add a `restore` / `verify-backup` command that loads the latest backup into a temp DB, runs `PRAGMA integrity_check`, and asserts row counts — scheduled monthly with a phone ping on failure.
+3. **G5 — pre-commit with secret scanning.** `gitleaks` / `detect-secrets` + the formatter/linter, so the `client_secret.json` class of mistake is blocked by tooling, not vigilance.
+4. **G7 — mypy in CI (pinned to 3.9).** Would have caught the `X | None` sites for free; catches the next one.
+5. **Backlog:** G3 (confirm FileVault; encrypt the off-machine backup copy), G4 (one-command full data export), T11 (structured logging).
+
+**Folder reorg — my ruling on the `product/` + `core/` question you raised:**
+- `product/` (docs zone) — **approved.** Move reference docs there at a clean checkpoint.
+- `core/` (moving code into a package dir) — **hold, not now.** `lan.sh sync_app()` deploys by copying flat files and `pyproject.toml` lists `py-modules` at the root; relocating code breaks the deploy. You were right to ask before moving. Leave code flat until `lan.sh` is reworked to install a wheel — separate ticket, not this cleanup.
+- **Timing:** don't run the physical moves while commits are in flight (we're seeing `index.lock` contention now). Do it on a quiet tree, on its own branch.
+
+**Keep doing:** surgical, staged commits; never `git add -A`.
 
 ---
 

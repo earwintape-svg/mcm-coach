@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Timely — Design Critique &amp; Redesign Vision</title>
+<style>
+/* ============ PAGE CHROME (the critique document itself) ============ */
+:root{
+  --ink:#0f1115; --ink2:#3a4250; --ink3:#6b7480; --hair:#e7e9ee;
+  --paper:#fbfbfd; --card:#ffffff; --mint:#1f9d74; --coral:#d9744f;
+  --flag:#c0392b; --flagbg:#fdece9; --okbg:#e9f7f1;
+  /* Timely's real tokens — used inside every phone mock for fidelity */
+  --t-bg:#0e1116; --t-panel:#161b22; --t-cell:#11151b; --t-line:#232a33;
+  --t-tx:#f0f3f6; --t-dim:#93a0ad; --t-faint:#5b6671;
+  --t-easy:#34c77b; --t-strides:#3ec6c0; --t-long:#5aa2ff; --t-tempo:#f5a623;
+  --t-hard:#ff6b6b; --t-accent:#5DCAA5; --t-accent2:#F0997B; --t-good:#34c77b;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:16px/1.6 -apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+a{color:var(--mint)}
+
+/* hero band */
+.masthead{background:#0e1116;color:#f0f3f6;padding:64px 0 56px;
+  background-image:radial-gradient(900px 380px at 78% -10%,rgba(93,202,165,.20),transparent 60%),
+                  radial-gradient(700px 360px at 12% 120%,rgba(240,153,123,.16),transparent 60%)}
+.masthead .eyebrow{letter-spacing:.22em;text-transform:uppercase;font-size:12px;
+  font-weight:700;color:#5DCAA5;margin:0 0 16px}
+.masthead h1{font-size:46px;line-height:1.05;letter-spacing:-1.3px;margin:0 0 16px;font-weight:800}
+.masthead p{font-size:18px;color:#c4ccd6;max-width:720px;margin:0}
+.logo{display:inline-flex;align-items:center;gap:13px;margin-bottom:26px}
+.logo svg{display:block}
+.logo b{font-size:21px;letter-spacing:-.4px}
+.byline{margin-top:30px;font-size:14px;color:#8b95a1;display:flex;gap:20px;flex-wrap:wrap}
+.byline span{display:inline-flex;gap:7px;align-items:center}
+
+/* section scaffolding */
+section{padding:60px 0;border-bottom:1px solid var(--hair)}
+.kicker{letter-spacing:.18em;text-transform:uppercase;font-size:12px;font-weight:700;
+  color:var(--mint);margin:0 0 12px}
+h2{font-size:32px;letter-spacing:-.7px;line-height:1.12;margin:0 0 14px;font-weight:800}
+h3{font-size:21px;letter-spacing:-.3px;margin:34px 0 10px;font-weight:700}
+.lead{font-size:18px;color:var(--ink2);max-width:780px;margin:0 0 8px}
+p{max-width:780px;color:var(--ink2)}
+.muted{color:var(--ink3)}
+
+/* philosophy cards */
+.tenets{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-top:34px}
+.tenet{background:var(--card);border:1px solid var(--hair);border-radius:18px;padding:22px 22px 24px;
+  box-shadow:0 1px 0 rgba(16,18,21,.03),0 18px 40px -28px rgba(16,18,21,.22)}
+.tenet .no{font-size:13px;font-weight:800;color:var(--mint);letter-spacing:.04em}
+.tenet h4{margin:8px 0 8px;font-size:17px;letter-spacing:-.2px}
+.tenet p{font-size:14.5px;margin:0;color:var(--ink2)}
+
+/* screen comparison layout */
+.screen{padding:54px 0;border-bottom:1px dashed var(--hair)}
+.screen:last-child{border-bottom:none}
+.screen .tag{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--coral);margin-bottom:10px}
+.compare{display:grid;grid-template-columns:340px 1fr 340px;gap:30px;align-items:start;margin-top:26px}
+.col-label{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+  margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.col-label.now{color:var(--ink3)}
+.col-label.next{color:var(--mint)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+/* critique list (middle column) */
+.crit{list-style:none;margin:34px 0 0;padding:0}
+.crit li{position:relative;padding:14px 0 14px 40px;border-top:1px solid var(--hair)}
+.crit li:first-child{border-top:none}
+.crit .n{position:absolute;left:0;top:13px;width:26px;height:26px;border-radius:8px;
+  background:var(--flagbg);color:var(--flag);font-size:13px;font-weight:800;
+  display:flex;align-items:center;justify-content:center}
+.crit li.win .n{background:var(--okbg);color:var(--mint)}
+.crit b{color:var(--ink);font-weight:700}
+.crit p{font-size:14.5px;margin:4px 0 0;color:var(--ink2);max-width:none}
+.crit .fix{font-size:13.5px;margin-top:6px;color:var(--mint);font-weight:600}
+
+/* ====== iPHONE FRAME — shared by current + redesign mocks ====== */
+.phone{width:340px;border-radius:46px;background:#000;padding:11px;
+  box-shadow:0 2px 4px rgba(0,0,0,.3),0 40px 80px -40px rgba(0,0,0,.55);position:relative}
+.phone .screenarea{border-radius:36px;overflow:hidden;background:var(--t-bg);position:relative;height:680px}
+.phone .notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);
+  width:108px;height:30px;background:#000;border-radius:18px;z-index:30}
+.scrollport{height:100%;overflow:hidden;position:relative}
+.statusbar{height:50px;display:flex;align-items:flex-end;justify-content:space-between;
+  padding:0 24px 6px;color:var(--t-tx);font-size:13px;font-weight:600}
+.statusbar .r{display:flex;gap:6px;align-items:center;font-size:12px}
+.caption{font-size:13px;color:var(--ink3);margin-top:14px;text-align:center;line-height:1.45}
+
+/* ---- Timely component styles, faithfully ported from ui.html ---- */
+.tl{font:14px/1.45 -apple-system,'SF Pro Text',Helvetica,Arial,sans-serif;color:var(--t-tx)}
+.tl .pad{padding:14px 14px 80px}
+.tl .hero{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.tl .hero h1{font-size:21px;font-weight:700;letter-spacing:-.6px;margin:0}
+.tl .hero .race{color:var(--t-dim);font-size:11.5px;margin-top:2px}
+.tl .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.tl .stat{background:var(--t-panel);border:1px solid var(--t-line);border-radius:13px;
+  padding:10px 6px;text-align:center}
+.tl .stat b{display:block;font-size:19px;letter-spacing:-.5px}
+.tl .stat span{font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.6px}
+.tl .seg{display:inline-flex;background:var(--t-panel);border:1px solid var(--t-line);
+  border-radius:10px;padding:3px;gap:2px}
+.tl .seg button{border:none;background:none;padding:6px 12px;border-radius:8px;
+  color:var(--t-dim);font-weight:600;font-size:13px;font-family:inherit}
+.tl .seg button.on{background:var(--t-accent);color:#06231b}
+.tl .row3{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.tl .btn{background:var(--t-panel);color:var(--t-tx);border:1px solid var(--t-line);
+  border-radius:9px;padding:8px 12px;font-size:12.5px;font-family:inherit}
+.tl .legend{display:flex;gap:9px;color:var(--t-dim);font-size:11px;flex-wrap:wrap;margin:8px 0 10px}
+.tl .legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:0}
+.tl .panel{background:var(--t-panel);border:1px solid var(--t-line);border-radius:16px;
+  padding:14px 15px;margin-top:12px}
+.tl .panel h3{margin:0 0 8px;font-size:14px}
+.tl .c-easy{background:var(--t-easy)} .tl .c-strides{background:var(--t-strides)}
+.tl .c-long{background:var(--t-long)} .tl .c-tempo{background:var(--t-tempo)}
+.tl .c-hard{background:var(--t-hard)}
+.tl .tabbar{position:absolute;bottom:0;left:0;right:0;display:flex;
+  background:rgba(14,17,22,.97);backdrop-filter:blur(14px);border-top:1px solid var(--t-line);
+  padding:8px 0 22px;z-index:20}
+.tl .tab{flex:1;display:flex;flex-direction:column;gap:3px;align-items:center;
+  color:var(--t-dim);font-size:10px;font-weight:600}
+.tl .tab.on{color:var(--t-accent)}
+.tl .tab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round}
+.tl .skel{padding:46px 10px;text-align:center;color:var(--t-faint);font-size:13px}
+.tl .skel i{display:inline-block;width:14px;height:14px;border:2px solid var(--t-faint);
+  border-top-color:var(--t-accent);border-radius:50%;vertical-align:-2px;margin-right:8px}
+.tl .toast{position:absolute;bottom:78px;left:50%;transform:translateX(-50%);
+  background:#2d1515;border:1px solid #553030;color:#f3a9a0;border-radius:12px;
+  padding:10px 14px;font-size:12.5px;white-space:nowrap;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+
+/* TOC / nav */
+.toc{display:flex;gap:10px;flex-wrap:wrap;margin-top:30px}
+.toc a{background:#161b22;color:#cdd5de;border:1px solid #232a33;border-radius:999px;
+  padding:8px 15px;font-size:13px;font-weight:600;text-decoration:none}
+.toc a:hover{border-color:#5DCAA5;color:#fff}
+
+footer{padding:50px 0 80px;color:var(--ink3);font-size:14px}
+@media(max-width:980px){.compare{grid-template-columns:1fr;justify-items:center}
+  .crit{max-width:520px}}
+</style></head>
+<body>
+
+<!-- ================= MASTHEAD ================= -->
+<header class="masthead"><div class="wrap">
+  <div class="logo">
+    <svg width="40" height="40" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#101418" stroke="#232a33"/><path d="M20 20 L33 32 L20 44" fill="none" stroke="#5DCAA5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 24 L46 32 L36 40" fill="none" stroke="#F0997B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <b>timely</b>
+  </div>
+  <p class="eyebrow">Design Critique &amp; Redesign Vision</p>
+  <h1>Making Timely one of the<br>most beautiful apps you run with.</h1>
+  <p>A working designer's teardown of the current app, judged against the design language of 2026 — content-first depth, calm focus, glanceable data, and motion that means something — followed by a screen-by-screen redesign that keeps Timely a mobile web app.</p>
+  <div class="byline">
+    <span>● Scope: current-state mocks + critique + redesign</span>
+    <span>● Platform: mobile web PWA</span>
+    <span>● Reviewed from your screen recording + source (ui.html / app.js)</span>
+  </div>
+  <div class="toc">
+    <a href="#philosophy">The philosophy</a>
+    <a href="#today">Today</a>
+    <a href="#plan">Plan</a>
+    <a href="#rpe">Log a run</a>
+    <a href="#activities">Activities</a>
+    <a href="#system">System &amp; next steps</a>
+  </div>
+</div></header>
+
+<!-- ================= PHILOSOPHY ================= -->
+<section id="philosophy"><div class="wrap">
+  <p class="kicker">The ethos I'm designing toward</p>
+  <h2>Five beliefs the best apps of 2026 are built on.</h2>
+  <p class="lead">These aren't decoration trends — they're the load-bearing principles behind Apple's Liquid Glass system, the calm-design movement, and the way modern fitness apps make dense data feel effortless. Every critique below is measured against them.</p>
+
+  <div class="tenets">
+    <div class="tenet"><div class="no">01</div><h4>Content leads, chrome floats</h4>
+      <p>The data is the interface. Controls sit on translucent layers <em>above</em> the content, never competing with it. Hierarchy comes from depth — elevation, blur, soft shadow — not from drawing another box with another border.</p></div>
+    <div class="tenet"><div class="no">02</div><h4>One screen, one job</h4>
+      <p>Each view has a single primary action that is large, obvious, and lands where the thumb already is. Everything else is secondary and quiet. A wall of equal-weight buttons is a decision tax paid on every visit.</p></div>
+    <div class="tenet"><div class="no">03</div><h4>Glanceable first, deep on demand</h4>
+      <p>An athlete reads their app mid-stride. The one number that matters today should be legible in half a second. Detail is earned through progressive disclosure — tap to go deeper, never front-load the dashboard.</p></div>
+    <div class="tenet"><div class="no">04</div><h4>Calm by subtraction</h4>
+      <p>Cognitive ease beats feature density. Fewer competing colors, generous breathing room, restrained type scale. If a label, border, or chip isn't doing real work, it's noise — remove it.</p></div>
+    <div class="tenet"><div class="no">05</div><h4>Motion that means something</h4>
+      <p>Transitions explain where things came from and where they go. Tactile, physical feedback on every commit. Motion is a continuous living space, not a slideshow of static pages — but it's purposeful, never gratuitous.</p></div>
+  </div>
+</div></section>
+<!-- ================= TODAY ================= -->
+<section id="today" class="screen"><div class="wrap">
+  <span class="tag">Screen 01 · the one you open every day</span>
+  <h2>Today</h2>
+  <p class="lead">This is the screen that decides whether Timely feels like a coach or a control panel. Right now it's a vertical stack of up to ten equal-weight panels — countdown, coach card, readiness, the workout, a rating widget, the week report — each in its own bordered box, all shouting at the same volume. There's no answer to the only question a runner has when they open it: <em>what am I doing today, and am I ready?</em></p>
+
+  <div class="compare">
+    <!-- CURRENT -->
+    <div>
+      <div class="col-label now"><span class="dot" style="background:#9aa3ad"></span>Current</div>
+      <div class="phone"><div class="notch"></div><div class="screenarea"><div class="scrollport tl">
+        <div class="statusbar"><span>1:35</span><span class="r">5G ▾ 66%▮</span></div>
+        <div class="pad">
+          <div class="hero">
+            <svg width="34" height="34" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#101418" stroke="#232a33"/><path d="M20 20 L33 32 L20 44" fill="none" stroke="#5DCAA5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 24 L46 32 L36 40" fill="none" stroke="#F0997B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div><h1>timely</h1><div class="race">Run on time · MCM Oct 25, 2026 · sub-3:25</div></div>
+          </div>
+          <div class="stats">
+            <div class="stat"><b>128</b><span>days to go</span></div>
+            <div class="stat"><b>18/26</b><span>mi this week</span></div>
+            <div class="stat"><b>94</b><span>scheduled</span></div>
+          </div>
+          <!-- week strip -->
+          <div style="display:flex;gap:2px;background:var(--t-panel);border:1px solid var(--t-line);border-radius:15px;padding:9px 5px 7px;margin-bottom:11px">
+            <div style="flex:1;text-align:center"><div style="font-size:9px;color:var(--t-dim)">MON</div><div style="font-size:13px;font-weight:600;margin:3px 0">15</div><div style="color:var(--t-good);font-size:10px;font-weight:800">✓</div></div>
+            <div style="flex:1;text-align:center"><div style="font-size:9px;color:var(--t-dim)">TUE</div><div style="font-size:13px;font-weight:600;margin:3px 0">16</div><div style="color:var(--t-good);font-size:10px;font-weight:800">✓</div></div>
+            <div style="flex:1;text-align:center"><div style="font-size:9px;color:var(--t-dim)">WED</div><div style="font-size:13px;font-weight:600;margin:3px 0">17</div><div style="height:7px"></div></div>
+            <div style="flex:1;text-align:center"><div style="font-size:9px;color:var(--t-dim)">THU</div><div style="font-size:13px;font-weight:600;margin:3px 0">18</div><div style="color:var(--t-good);font-size:10px;font-weight:800">✓</div></div>
+            <div style="flex:1;text-align:center"><div style="font-size:9px;color:var(--t-dim)">FRI</div><div style="font-size:13px;font-weight:600;width:26px;height:26px;line-height:26px;border-radius:50%;background:var(--t-accent);color:#fff;margin:1px auto">19</div><div style="height:7px"></div></div>
+            <div style="flex:1;text-align:center"><div style="font-size:9px;color:var(--t-dim)">SAT</div><div style="font-size:13px;font-weight:600;margin:3px 0">20</div><div class="dots"><i style="display:inline-block;width:6px;height:6px;border-radius:3px;background:var(--t-long)"></i></div></div>
+            <div style="flex:1;text-align:center"><div style="font-size:9px;color:var(--t-dim)">SUN</div><div style="font-size:13px;font-weight:600;margin:3px 0">21</div><div style="height:7px"></div></div>
+          </div>
+          <!-- countdown panel -->
+          <div class="panel" style="margin-top:0">
+            <div style="display:flex;justify-content:space-between">
+              <div><div style="font-size:10px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.7px">Marine Corps Marathon</div>
+              <div style="font-size:26px;font-weight:700;margin:2px 0">128<span style="font-size:13px;font-weight:400;color:var(--t-dim)"> days</span></div>
+              <div style="font-size:11px;color:var(--t-dim)">Oct 25, 2026</div></div>
+              <div style="text-align:right"><div style="font-size:10px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.7px">Projection</div>
+              <div style="font-size:22px;font-weight:700;color:var(--t-good)">3:22:40</div>
+              <div style="font-size:11px;color:var(--t-good)">On track ✓</div></div>
+            </div>
+          </div>
+          <!-- coach card -->
+          <div style="background:linear-gradient(135deg,#1a2433,#16202c);border:1px solid #27384d;border-radius:15px;padding:13px 15px 13px 18px;margin-top:12px;position:relative;overflow:hidden">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--t-accent2)"></div>
+            <b style="font-size:15px">Coach suggestion</b>
+            <div style="color:var(--t-dim);font-size:12px;margin-top:3px">RHR elevated 2 days — consider easing Thu.</div>
+            <div style="display:flex;gap:8px;margin-top:10px"><span class="btn">Later</span><span class="btn" style="background:var(--t-accent);border-color:var(--t-accent);color:#06231b;font-weight:600">Apply</span></div>
+          </div>
+          <!-- brief: today's workout -->
+          <div style="background:linear-gradient(135deg,#1a2433,#16202c);border:1px solid #27384d;border-radius:15px;padding:13px 15px 13px 18px;margin-top:12px;position:relative;overflow:hidden">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--t-easy)"></div>
+            <div style="display:flex;justify-content:space-between"><b style="font-size:16px">5mi Easy</b><span style="background:#11161b;border:1px solid var(--t-line);border-radius:999px;padding:5px 10px;font-size:12px">61° · 78%</span></div>
+            <div style="color:var(--t-dim);font-size:12px;margin-top:3px">Today · 5 mi · 9:30–10:00/mi · easy</div>
+            <div style="display:flex;gap:11px;margin-top:8px;color:var(--t-dim);font-size:11.5px">RHR <b style="color:var(--t-tx)">48</b> · Sleep <b style="color:var(--t-tx)">7.1h</b> · Body Battery <b style="color:var(--t-tx)">71</b> · <span style="color:var(--t-good)">● ready</span></div>
+            <div style="display:flex;gap:8px;margin-top:10px"><span class="btn">Details</span></div>
+          </div>
+          <!-- quick log -->
+          <div class="panel">
+            <div style="font-size:12.5px;color:var(--t-dim);margin-bottom:9px">How did today's <b style="color:var(--t-tx)">5.0 mi</b> feel?</div>
+            <div style="display:flex;gap:5px;margin-bottom:10px">
+              <span class="btn" style="flex:1;text-align:center">1–2</span><span class="btn" style="flex:1;text-align:center">3–4</span><span class="btn" style="flex:1;text-align:center">5–6</span><span class="btn" style="flex:1;text-align:center">7–8</span><span class="btn" style="flex:1;text-align:center">9–10</span></div>
+            <div class="btn" style="display:block;text-align:left;color:var(--t-dim)">Nimbus 27 · default ⌄</div>
+          </div>
+          <!-- week report card -->
+          <div class="panel">
+            <h3>Week 1 report card <span style="color:var(--t-dim);font-weight:400">— 17.7 of 26 mi (68%)</span></h3>
+            <div style="background:var(--t-cell);border-radius:6px;height:7px;margin:2px 0 11px"><div style="background:var(--t-good);height:7px;border-radius:6px;width:68%"></div></div>
+            <div style="display:flex;gap:8px;font-size:12px;padding:6px 0;border-top:1px solid var(--t-line)"><span style="width:74px;color:var(--t-dim)">Mon Jun 15</span><b style="flex:1">4mi Easy</b><span style="color:var(--t-good)">✓ 3.7</span></div>
+            <div style="display:flex;gap:8px;font-size:12px;padding:6px 0;border-top:1px solid var(--t-line)"><span style="width:74px;color:var(--t-dim)">Tue Jun 16</span><b style="flex:1">5mi Strides</b><span style="color:var(--t-tempo)">⚠ 5.0</span></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab on"><svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+          <div class="tab"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+          <div class="tab"><svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
+        </div>
+      </div></div></div>
+      <p class="caption">The real stack: hero → stats → week strip → countdown → coach card → workout → rating → report card. Eight boxes deep before the fold ends.</p>
+    </div>
+
+    <!-- CRITIQUE -->
+    <div>
+      <ul class="crit">
+        <li><span class="n">1</span><b>No focal point — everything is a box of equal weight.</b>
+          <p>Up to ten bordered panels stack vertically, each with the same fill, same 1px border, same radius. The eye has nowhere to land. The single most important thing — today's run — is the fourth or fifth card down.</p>
+          <p class="fix">Fix → promote one hero. Today's session becomes a full-width, elevated card that owns the top of the screen. Everything else demotes to quiet support.</p></li>
+        <li><span class="n">2</span><b>The countdown and stat tiles say the same thing twice.</b>
+          <p>"128 days to go" appears in a stat tile <em>and</em> the countdown panel. "Mi this week 18/26" duplicates the report-card progress bar. Redundancy is cognitive cost with no payoff.</p>
+          <p class="fix">Fix → one countdown, one weekly-progress indicator, each shown once.</p></li>
+        <li><span class="n">3</span><b>Five competing accent colors, no semantic discipline.</b>
+          <p>Mint, coral, blue, amber, red all appear above the fold. When everything is colored, color stops meaning anything. The mint accent is also the "today" dot, the active tab, the primary button, and the readiness state — four jobs for one color.</p>
+          <p class="fix">Fix → mint = "your action / on-track" only. Workout-type colors live as small dots, not full bars.</p></li>
+        <li><span class="n">4</span><b>The wordmark + race line is wasted real estate.</b>
+          <p>"timely · Run on time · MCM Oct 25, 2026 · sub-3:25" is branding on a screen the user opens twenty times a week. They know the app's name. That row should be working — it's prime glance space.</p>
+          <p class="fix">Fix → collapse to a slim glass bar; surface today's readiness state there instead.</p></li>
+        <li><span class="n">5</span><b>Rating + shoe picker sits inline, cold, before the run is even done.</b>
+          <p>"How did today's 5.0 mi feel?" with a row of five identical buttons is a form, not a moment. It appears with no celebration of the run just completed.</p>
+          <p class="fix">Fix → move logging into a warm, focused moment (see Screen 03), triggered after the run.</p></li>
+        <li class="win"><span class="n">✓</span><b>What's genuinely good: the readiness data is gold.</b>
+          <p>RHR, sleep, Body Battery, HRV, form, weather-adjusted pace — this is real coaching intelligence most apps don't have. The problem is purely presentation, not substance. Don't lose it; frame it.</p></li>
+      </ul>
+    </div>
+
+    <!-- REDESIGN -->
+    <div>
+      <div class="col-label next"><span class="dot" style="background:#1f9d74"></span>Redesign</div>
+      <div class="phone"><div class="notch"></div><div class="screenarea"><div class="scrollport tl">
+        <div class="statusbar"><span>1:35</span><span class="r">5G ▾ 66%▮</span></div>
+        <!-- glass header bar -->
+        <div style="position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:6px 18px 10px;background:rgba(14,17,22,.7);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.05);z-index:10">
+          <div style="display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#101418"/><path d="M20 20 L33 32 L20 44" fill="none" stroke="#5DCAA5" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 24 L46 32 L36 40" fill="none" stroke="#F0997B" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span style="font-size:13px;color:var(--t-dim)">Fri, Jun 19</span></div>
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--t-good);background:rgba(52,199,123,.12);border:1px solid rgba(52,199,123,.25);border-radius:999px;padding:4px 11px">● Ready</span>
+        </div>
+        <div style="padding:16px 16px 80px">
+          <!-- HERO: today's run -->
+          <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--t-faint);margin:2px 0 10px">Today</div>
+          <div style="background:linear-gradient(160deg,#18241d,#121a16);border:1px solid rgba(93,202,165,.22);border-radius:24px;padding:20px;box-shadow:0 24px 50px -30px rgba(93,202,165,.4),inset 0 1px 0 rgba(255,255,255,.04);position:relative;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div><div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--t-easy);font-weight:600"><span style="width:8px;height:8px;border-radius:50%;background:var(--t-easy)"></span>Easy run</div>
+                <div style="font-size:30px;font-weight:800;letter-spacing:-1px;margin:8px 0 2px">5 miles</div></div>
+              <div style="text-align:right;background:rgba(255,255,255,.04);border-radius:12px;padding:8px 11px"><div style="font-size:11px;color:var(--t-dim)">61° · 78%</div><div style="font-size:11px;color:var(--t-dim);margin-top:2px">light wind</div></div>
+            </div>
+            <div style="display:flex;gap:24px;margin:14px 0 4px">
+              <div><div style="font-size:11px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.5px">Target pace</div><div style="font-size:22px;font-weight:700;letter-spacing:-.3px;margin-top:2px">9:30<span style="font-size:13px;color:var(--t-dim)">–10:00</span></div></div>
+              <div><div style="font-size:11px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.5px">Effort</div><div style="font-size:22px;font-weight:700;margin-top:2px">Easy</div></div>
+            </div>
+            <div style="font-size:13px;color:#bfe9d6;margin-top:12px;line-height:1.5">Keep it conversational. You slept 7.1h and Body Battery's at 71 — green light. Heat's mild today, run by feel.</div>
+            <button style="width:100%;margin-top:16px;background:var(--t-accent);color:#06231b;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;font-family:inherit">Send to watch ▸</button>
+          </div>
+          <!-- compact readiness chips (progressive disclosure) -->
+          <div style="display:flex;gap:8px;margin-top:12px;overflow:hidden">
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:14px;padding:11px 8px;text-align:center"><div style="font-size:16px;font-weight:700">48</div><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.4px">RHR</div></div>
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:14px;padding:11px 8px;text-align:center"><div style="font-size:16px;font-weight:700">7.1h</div><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.4px">Sleep</div></div>
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:14px;padding:11px 8px;text-align:center"><div style="font-size:16px;font-weight:700;color:var(--t-good)">+4</div><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.4px">Form</div></div>
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:14px;padding:11px 8px;text-align:center"><div style="font-size:16px;font-weight:700">71</div><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.4px">Battery</div></div>
+          </div>
+          <!-- week + countdown, unified, quiet -->
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:16px;padding:14px">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:12px;color:var(--t-dim)">This week</span><span style="font-size:12px;color:var(--t-dim)">18 / 26 mi</span></div>
+              <div style="background:var(--t-cell);border-radius:6px;height:6px;margin-top:9px"><div style="background:var(--t-accent);height:6px;border-radius:6px;width:69%"></div></div>
+            </div>
+            <div style="background:var(--t-panel);border:1px solid var(--t-line);border-radius:16px;padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:800;letter-spacing:-.5px">128</div><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.4px">days to MCM</div></div>
+          </div>
+          <div style="text-align:center;font-size:12px;color:var(--t-faint);margin-top:14px">Projecting 3:22:40 · on track for sub-3:25 ✓</div>
+        </div>
+        <div class="tabbar">
+          <div class="tab on"><svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+          <div class="tab"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+          <div class="tab"><svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
+        </div>
+      </div></div></div>
+      <p class="caption">One hero answers "what &amp; am I ready" instantly. Readiness demotes to a glanceable strip; week + countdown unify into one quiet row. A single primary action.</p>
+    </div>
+  </div>
+</div></section>
+<!-- ================= PLAN ================= -->
+<section id="plan" class="screen"><div class="wrap">
+  <span class="tag">Screen 02 · the 20-week map</span>
+  <h2>Plan</h2>
+  <p class="lead">The Plan tab carries your whole training block, and the List view is honestly the strongest screen in the app — the planned-vs-actual logic is excellent. But it's buried under a control bar with eight wrapping buttons and a five-color legend, and the Month grid collapses into illegible confetti on a phone. The information architecture is fighting the small screen instead of embracing it.</p>
+
+  <div class="compare">
+    <!-- CURRENT -->
+    <div>
+      <div class="col-label now"><span class="dot" style="background:#9aa3ad"></span>Current</div>
+      <div class="phone"><div class="notch"></div><div class="screenarea"><div class="scrollport tl">
+        <div class="statusbar"><span>1:36</span><span class="r">5G ▾ 67%▮</span></div>
+        <div class="pad">
+          <div class="hero">
+            <svg width="34" height="34" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#101418" stroke="#232a33"/><path d="M20 20 L33 32 L20 44" fill="none" stroke="#5DCAA5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 24 L46 32 L36 40" fill="none" stroke="#F0997B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div><h1>timely</h1><div class="race">Run on time · MCM Oct 25, 2026 · sub-3:25</div></div>
+          </div>
+          <div class="stats">
+            <div class="stat"><b>128</b><span>days to go</span></div>
+            <div class="stat"><b>18/26</b><span>mi this week</span></div>
+            <div class="stat"><b>94</b><span>scheduled</span></div>
+          </div>
+          <!-- crowded toolbar -->
+          <div class="row3">
+            <span class="seg"><button class="on">List</button><button>Month</button></span>
+            <span class="btn">Vacation</span>
+            <span class="btn">📅 Sync to Calendar</span>
+            <span class="btn">↻</span>
+          </div>
+          <div class="legend">
+            <span><i style="background:var(--t-easy)"></i>Easy</span>
+            <span><i style="background:var(--t-strides)"></i>Strides</span>
+            <span><i style="background:var(--t-tempo)"></i>Tempo·Hills</span>
+            <span><i style="background:var(--t-hard)"></i>Intervals</span>
+            <span><i style="background:var(--t-long)"></i>Long</span>
+          </div>
+          <!-- list -->
+          <div class="panel" style="margin-top:0">
+            <div style="color:var(--t-faint);font-size:10px;text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px">Week 0 · 7 mi</div>
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--t-line)"><span style="width:54px;color:var(--t-dim);font-size:12px">Fri 12</span><i style="width:9px;height:9px;border-radius:5px;background:var(--t-easy)"></i><b style="flex:1;font-size:13px">3mi Test</b><span style="color:var(--t-hard);font-size:12px">? mi · missed</span></div>
+            <div style="color:var(--t-faint);font-size:10px;text-transform:uppercase;letter-spacing:.7px;margin:12px 0 4px">Week 1 · 26 mi</div>
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--t-line)"><span style="width:54px;color:var(--t-dim);font-size:12px">Mon 15</span><i style="width:9px;height:9px;border-radius:5px;background:var(--t-easy)"></i><b style="flex:1;font-size:13px">4mi Easy</b><span style="color:var(--t-good);font-size:12px">✓ 3.7</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--t-line)"><span style="width:54px;color:var(--t-dim);font-size:12px">Tue 16</span><i style="width:9px;height:9px;border-radius:5px;background:var(--t-strides)"></i><b style="flex:1;font-size:13px">5mi Strides</b><span style="color:var(--t-good);font-size:12px">✓ 5.0</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--t-line)"><span style="width:54px;color:var(--t-dim);font-size:12px">Thu 18</span><i style="width:9px;height:9px;border-radius:5px;background:var(--t-easy)"></i><b style="flex:1;font-size:13px">4mi Easy</b><span style="color:var(--t-good);font-size:12px">✓ 4.0</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--t-line)"><span style="width:54px;color:var(--t-accent);font-size:12px">Fri 19</span><i style="width:9px;height:9px;border-radius:5px;background:var(--t-easy)"></i><b style="flex:1;font-size:13px;color:var(--t-accent)">5mi Easy</b><span style="color:var(--t-good);font-size:12px">✓ 5.0</span></div>
+            <div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-top:1px solid var(--t-line)"><span style="width:54px;color:var(--t-dim);font-size:12px">Sat 20</span><i style="width:9px;height:9px;border-radius:5px;background:var(--t-long)"></i><b style="flex:1;font-size:13px">8mi LR</b><span style="color:var(--t-faint);font-size:12px">8 mi ›</span></div>
+          </div>
+          <div class="panel"><h3>Weekly mileage — planned vs run</h3>
+            <svg viewBox="0 0 320 70" style="width:100%"><rect x="6" y="34" width="10" height="22" fill="#5b6671" opacity=".75" rx="2"/><rect x="17" y="40" width="10" height="16" fill="#5DCAA5" rx="2"/><rect x="34" y="20" width="10" height="36" fill="#5b6671" opacity=".75" rx="2"/><rect x="45" y="30" width="10" height="26" fill="#5DCAA5" rx="2"/><rect x="62" y="12" width="10" height="44" fill="#5b6671" opacity=".75" rx="2"/><rect x="90" y="8" width="10" height="48" fill="#5b6671" opacity=".75" rx="2"/></svg>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+          <div class="tab on"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+          <div class="tab"><svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
+        </div>
+      </div></div></div>
+      <p class="caption">Eight controls and a 5-item legend eat the top third. Month view (not shown) shrinks to 76px cells with truncated chips — unreadable on a phone.</p>
+    </div>
+
+    <!-- CRITIQUE -->
+    <div>
+      <ul class="crit">
+        <li><span class="n">1</span><b>The control bar is a cockpit, not a phone screen.</b>
+          <p>List/Month, prev/next arrows, Vacation, Sync to Calendar, refresh, and a five-swatch legend wrap across two-plus rows. These are desktop affordances crammed onto 360px. On mobile the buttons fall below the 44pt tap minimum and wrap unpredictably.</p>
+          <p class="fix">Fix → keep only the List/Month toggle visible. Vacation, Sync, refresh move to a single "···" sheet. The legend becomes contextual — colors are self-evident from the dots.</p></li>
+        <li><span class="n">2</span><b>Month view doesn't survive the small screen.</b>
+          <p>A 7-column grid at phone width gives ~46px cells. Chips truncate, the mileage subtitle is hidden entirely (<code>.chip .mi{display:none}</code>), and drag-to-move — a lovely desktop interaction — is near-impossible with a thumb.</p>
+          <p class="fix">Fix → make List the default and the star. Reframe Month as a compact heat-strip overview, with full editing reserved for the (better-suited) List.</p></li>
+        <li><span class="n">3</span><b>The week's hardest signal — planned vs actual — hides on the far right.</b>
+          <p>"✓ 3.7" in 12px is the payoff of the whole screen, yet it's the smallest, rightmost element. The week's total mileage progress isn't visualized at the week level at all in List.</p>
+          <p class="fix">Fix → give each week a header card with a mileage progress ring; align the actual result as a clear status pill on each row.</p></li>
+        <li><span class="n">4</span><b>The hero block repeats on every tab.</b>
+          <p>The wordmark + three stat tiles render identically on Today, Plan, and Activities. That's three copies of branding and duplicated stats, pushing real content down on every screen.</p>
+          <p class="fix">Fix → a slim shared glass header; let each tab's content start near the top.</p></li>
+        <li class="win"><span class="n">✓</span><b>What's genuinely good: the List logic is the soul of the app.</b>
+          <p>Week grouping, per-day color coding, planned-vs-actual judgment, "missed — tap to reschedule" — this is exactly what a marathoner wants. It just needs room to breathe and a clearer visual rhythm.</p></li>
+      </ul>
+    </div>
+
+    <!-- REDESIGN -->
+    <div>
+      <div class="col-label next"><span class="dot" style="background:#1f9d74"></span>Redesign</div>
+      <div class="phone"><div class="notch"></div><div class="screenarea"><div class="scrollport tl">
+        <div class="statusbar"><span>1:36</span><span class="r">5G ▾ 67%▮</span></div>
+        <div style="position:sticky;top:0;background:rgba(14,17,22,.7);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.05);padding:8px 16px 12px;z-index:10">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font-size:16px;font-weight:700;letter-spacing:-.3px">Plan</div><div style="font-size:11.5px;color:var(--t-dim)">Week 1 of 20 · MCM</div></div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="seg" style="border-radius:10px"><button class="on" style="padding:5px 11px">List</button><button style="padding:5px 11px">Month</button></span>
+              <span style="width:32px;height:32px;border-radius:50%;background:var(--t-panel);border:1px solid var(--t-line);display:inline-flex;align-items:center;justify-content:center;color:var(--t-dim)">···</span>
+            </div>
+          </div>
+        </div>
+        <div style="padding:14px 16px 80px">
+          <!-- current week card -->
+          <div style="background:linear-gradient(160deg,#18241d,#121a16);border:1px solid rgba(93,202,165,.2);border-radius:20px;padding:16px;box-shadow:0 20px 44px -30px rgba(93,202,165,.4)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div><div style="font-size:11px;color:var(--t-easy);font-weight:700;letter-spacing:.08em;text-transform:uppercase">This week</div><div style="font-size:18px;font-weight:700;margin-top:3px">Week 1 — Base</div></div>
+              <div style="text-align:right"><div style="font-size:20px;font-weight:800;letter-spacing:-.5px">18<span style="font-size:12px;color:var(--t-dim)"> / 26 mi</span></div></div>
+            </div>
+            <div style="background:rgba(255,255,255,.08);border-radius:6px;height:6px;margin-top:11px"><div style="background:var(--t-accent);height:6px;border-radius:6px;width:69%"></div></div>
+          </div>
+          <!-- day rows with left rail -->
+          <div style="margin-top:14px">
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--t-line)"><div style="width:4px;align-self:stretch;border-radius:3px;background:var(--t-easy)"></div><div style="width:38px"><div style="font-size:10px;color:var(--t-dim);text-transform:uppercase">Mon</div><div style="font-size:16px;font-weight:700">15</div></div><div style="flex:1"><div style="font-weight:600">4mi Easy</div><div style="font-size:11.5px;color:var(--t-dim)">9:30–10:00/mi</div></div><span style="background:rgba(52,199,123,.14);color:var(--t-good);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600">3.7 mi ✓</span></div>
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--t-line)"><div style="width:4px;align-self:stretch;border-radius:3px;background:var(--t-strides)"></div><div style="width:38px"><div style="font-size:10px;color:var(--t-dim);text-transform:uppercase">Tue</div><div style="font-size:16px;font-weight:700">16</div></div><div style="flex:1"><div style="font-weight:600">5mi Strides</div><div style="font-size:11.5px;color:var(--t-dim)">6:30–7:00 surges</div></div><span style="background:rgba(52,199,123,.14);color:var(--t-good);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600">5.0 mi ✓</span></div>
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--t-line)"><div style="width:4px;align-self:stretch;border-radius:3px;background:var(--t-easy)"></div><div style="width:38px"><div style="font-size:10px;color:var(--t-dim);text-transform:uppercase">Thu</div><div style="font-size:16px;font-weight:700">18</div></div><div style="flex:1"><div style="font-weight:600">4mi Easy</div><div style="font-size:11.5px;color:var(--t-dim)">9:30–10:00/mi</div></div><span style="background:rgba(52,199,123,.14);color:var(--t-good);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600">4.0 mi ✓</span></div>
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 4px;border-bottom:1px solid var(--t-line);background:rgba(93,202,165,.05);border-radius:12px"><div style="width:4px;align-self:stretch;border-radius:3px;background:var(--t-easy)"></div><div style="width:38px"><div style="font-size:10px;color:var(--t-accent);text-transform:uppercase">Fri</div><div style="font-size:16px;font-weight:700;color:var(--t-accent)">19</div></div><div style="flex:1"><div style="font-weight:600">5mi Easy</div><div style="font-size:11.5px;color:var(--t-dim)">today</div></div><span style="background:rgba(52,199,123,.14);color:var(--t-good);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600">5.0 mi ✓</span></div>
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 4px"><div style="width:4px;align-self:stretch;border-radius:3px;background:var(--t-long)"></div><div style="width:38px"><div style="font-size:10px;color:var(--t-dim);text-transform:uppercase">Sat</div><div style="font-size:16px;font-weight:700">20</div></div><div style="flex:1"><div style="font-weight:600">8mi Long Run</div><div style="font-size:11.5px;color:var(--t-dim)">8:45–9:30/mi</div></div><span style="color:var(--t-faint);font-size:13px">upcoming ›</span></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+          <div class="tab on"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+          <div class="tab"><svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
+        </div>
+      </div></div></div>
+      <p class="caption">List leads. A glass header holds only the toggle; everything else collapses to "···". The active week gets an elevated card with a progress bar; each day has a color rail and one clear result pill.</p>
+    </div>
+  </div>
+</div></section>
+<!-- ================= RPE / LOG ================= -->
+<section id="rpe" class="screen"><div class="wrap">
+  <span class="tag">Screen 03 · the moment after a run</span>
+  <h2>Log how it felt</h2>
+  <p class="lead">Logging effort is the data that powers all of Timely's coaching — so the moment deserves care. Today it's a thin slider stranded at the bottom of a long analysis sheet, and in your recording the save actually failed with the words <code>Save failed: [object Object]</code> shown to the user. That single string undoes a lot of trust. This is the highest-leverage screen to make feel premium.</p>
+
+  <div class="compare">
+    <!-- CURRENT -->
+    <div>
+      <div class="col-label now"><span class="dot" style="background:#9aa3ad"></span>Current</div>
+      <div class="phone"><div class="notch"></div><div class="screenarea"><div class="scrollport tl" style="background:#0b0e12">
+        <div class="statusbar"><span>1:35</span><span class="r">5G ▾ 66%▮</span></div>
+        <!-- faded run analysis behind -->
+        <div style="padding:10px 16px;opacity:.35">
+          <div style="font-size:11px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.5px">Adj pace</div>
+          <div style="font-size:22px;font-weight:700">10:18</div>
+          <div style="height:60px"></div>
+        </div>
+        <!-- bottom sheet -->
+        <div style="position:absolute;left:0;right:0;bottom:0;background:var(--t-panel);border:1px solid var(--t-line);border-radius:18px 18px 0 0;padding:18px 16px 20px">
+          <div style="font-size:12px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px">How did it feel? <span style="color:var(--t-accent);text-transform:none;letter-spacing:0">slide to rate</span></div>
+          <input type="range" min="1" max="10" value="5" style="width:100%;accent-color:#5DCAA5">
+          <div style="display:flex;justify-content:space-between;color:var(--t-faint);font-size:11px;margin:2px 2px 14px"><span>1–3 recovery</span><span>4–6 easy</span><span>7–8 hard</span><span>9–10 max</span></div>
+          <input value="A bit tired" style="width:100%;background:var(--t-cell);border:1px solid var(--t-line);color:var(--t-tx);border-radius:9px;padding:11px;font-size:15px;font-family:inherit;margin-bottom:10px">
+          <div class="btn" style="display:flex;justify-content:space-between;align-items:center;color:var(--t-tx)">Nimbus 27 · default <span style="color:var(--t-dim)">⌄</span></div>
+          <div style="display:flex;gap:9px;justify-content:flex-end;margin-top:16px"><span class="btn">Close</span><span class="btn" style="background:var(--t-accent);border-color:var(--t-accent);color:#06231b;font-weight:600">Save &amp; done</span></div>
+        </div>
+        <!-- the real bug -->
+        <div class="toast">⚠ Save failed: [object Object]</div>
+      </div></div></div>
+      <p class="caption">Straight from your recording: a slider, a placeholder note, and a save that errored with <code>[object Object]</code> — the raw, unhandled error shown to the runner.</p>
+    </div>
+
+    <!-- CRITIQUE -->
+    <div>
+      <ul class="crit">
+        <li><span class="n">1</span><b>"Save failed: [object Object]" is a trust-killer — and a quick fix.</b>
+          <p>The toast reads <code>e.message</code> (good instinct) — but here that message is itself an object, almost certainly a <code>{error:{…}}</code> server payload coerced into the <code>Error</code> string. So the runner sees implementation guts at the exact moment they tried to give you data, and their note may be lost.</p>
+          <p class="fix">Fix → normalize server errors to a string at the fetch boundary, show a human line ("Couldn't save — tap to retry"), keep their input in the field, and add an offline queue so a flaky connection never loses a log.</p></li>
+        <li><span class="n">2</span><b>A slider is the wrong control for a 1–10 feeling.</b>
+          <p>Sliders demand fine motor precision for a coarse, emotional judgment. The current value is invisible until you decode a tiny label underneath. There's no tactile reward, no sense of "I picked Hard."</p>
+          <p class="fix">Fix → five large effort segments (Recovery → Max), each tappable with a satisfying selected state and a haptic tick. Coarse input, coarse control.</p></li>
+        <li><span class="n">3</span><b>The rating is stranded at the bottom of a 1,000px analysis sheet.</b>
+          <p>To rate a run the user scrolls past route, splits, lap bars, HR zones, and charts. The single action you most want them to complete is the least reachable thing in the sheet.</p>
+          <p class="fix">Fix → when a run needs a rating, open <em>to</em> the rating moment first; analysis lives one swipe deeper.</p></li>
+        <li><span class="n">4</span><b>No acknowledgment of the run they just finished.</b>
+          <p>The sheet is cold — a form, not a moment. After 5 hard miles the app should reflect the effort back before asking for input.</p>
+          <p class="fix">Fix → headline the distance, pace, and a one-line read ("Solid easy run — right on target") so logging feels like a reward, not a chore.</p></li>
+        <li><span class="n">5</span><b>Two near-identical rating UIs exist.</b>
+          <p>Today uses 1–2/3–4/… band buttons; the run sheet uses a 1–10 slider. Same concept, two designs, two mental models. Inconsistency taxes the user.</p>
+          <p class="fix">Fix → one effort component everywhere it appears.</p></li>
+      </ul>
+    </div>
+
+    <!-- REDESIGN -->
+    <div>
+      <div class="col-label next"><span class="dot" style="background:#1f9d74"></span>Redesign</div>
+      <div class="phone"><div class="notch"></div><div class="screenarea"><div class="scrollport tl" style="background:#0b0e12">
+        <div class="statusbar"><span>1:35</span><span class="r">5G ▾ 66%▮</span></div>
+        <div style="padding:16px 16px 0;opacity:.18"><div style="height:70px"></div></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(180deg,#171d25,#12161c);border-top:1px solid rgba(255,255,255,.06);border-radius:22px 22px 0 0;padding:8px 18px 22px;box-shadow:0 -20px 50px -20px rgba(0,0,0,.6)">
+          <div style="width:38px;height:5px;border-radius:3px;background:#39424d;margin:0 auto 16px"></div>
+          <!-- celebrate the run -->
+          <div style="text-align:center;margin-bottom:18px">
+            <div style="font-size:12px;color:var(--t-easy);font-weight:700;letter-spacing:.06em;text-transform:uppercase">Nice — run logged from your watch</div>
+            <div style="font-size:30px;font-weight:800;letter-spacing:-.6px;margin:6px 0 2px">5.0 mi · 9:26/mi</div>
+            <div style="font-size:13px;color:var(--t-dim)">Right on target for an easy day</div>
+          </div>
+          <div style="font-size:13px;color:var(--t-dim);margin-bottom:9px">How hard did that feel?</div>
+          <!-- tactile effort segments -->
+          <div style="display:flex;gap:6px;margin-bottom:16px">
+            <div style="flex:1;background:var(--t-cell);border:1px solid var(--t-line);border-radius:12px;padding:11px 0;text-align:center"><div style="font-size:15px;font-weight:700;color:var(--t-dim)">1–2</div><div style="font-size:9px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.3px">Recov</div></div>
+            <div style="flex:1;background:rgba(52,199,123,.16);border:1.5px solid var(--t-easy);border-radius:12px;padding:11px 0;text-align:center;box-shadow:0 8px 20px -8px rgba(52,199,123,.5)"><div style="font-size:15px;font-weight:800;color:var(--t-easy)">3–4</div><div style="font-size:9px;color:var(--t-easy);text-transform:uppercase;letter-spacing:.3px">Easy</div></div>
+            <div style="flex:1;background:var(--t-cell);border:1px solid var(--t-line);border-radius:12px;padding:11px 0;text-align:center"><div style="font-size:15px;font-weight:700;color:var(--t-dim)">5–6</div><div style="font-size:9px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.3px">Mod</div></div>
+            <div style="flex:1;background:var(--t-cell);border:1px solid var(--t-line);border-radius:12px;padding:11px 0;text-align:center"><div style="font-size:15px;font-weight:700;color:var(--t-dim)">7–8</div><div style="font-size:9px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.3px">Hard</div></div>
+            <div style="flex:1;background:var(--t-cell);border:1px solid var(--t-line);border-radius:12px;padding:11px 0;text-align:center"><div style="font-size:15px;font-weight:700;color:var(--t-dim)">9–10</div><div style="font-size:9px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.3px">Max</div></div>
+          </div>
+          <input placeholder="Add a note — sleep, legs, weather…" style="width:100%;background:var(--t-cell);border:1px solid var(--t-line);color:var(--t-tx);border-radius:12px;padding:12px;font-size:15px;font-family:inherit;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:10px;background:var(--t-cell);border:1px solid var(--t-line);border-radius:12px;padding:11px 13px;margin-bottom:16px"><span style="font-size:16px">👟</span><span style="flex:1;font-size:14px">Nimbus 27</span><span style="font-size:11px;color:var(--t-faint)">default · 142 mi</span></div>
+          <button style="width:100%;background:var(--t-accent);color:#06231b;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:700;font-family:inherit">Save run ✓</button>
+        </div>
+      </div></div></div>
+      <p class="caption">Opens to the moment. The run is celebrated first; effort is five big tactile segments (haptic on select); one primary action. And it can never say "[object Object]" — errors are caught, humane, and retryable.</p>
+    </div>
+  </div>
+</div></section>
+<!-- ================= ACTIVITIES ================= -->
+<section id="activities" class="screen"><div class="wrap">
+  <span class="tag">Screen 04 · the trophy case</span>
+  <h2>Activities</h2>
+  <p class="lead">This is where progress should feel <em>earned</em> — PRs, fitness trajectory, gear mileage, and the run history. The data's all here, but it reads like a spreadsheet: faint micro-labels, four panels stacked, and a wall-of-text "fitness check." A trophy case should make you want to keep training.</p>
+
+  <div class="compare">
+    <!-- CURRENT -->
+    <div>
+      <div class="col-label now"><span class="dot" style="background:#9aa3ad"></span>Current</div>
+      <div class="phone"><div class="notch"></div><div class="screenarea"><div class="scrollport tl">
+        <div class="statusbar"><span>1:36</span><span class="r">5G ▾ 67%▮</span></div>
+        <div class="pad">
+          <div class="hero">
+            <svg width="34" height="34" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#101418" stroke="#232a33"/><path d="M20 20 L33 32 L20 44" fill="none" stroke="#5DCAA5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 24 L46 32 L36 40" fill="none" stroke="#F0997B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div><h1>timely</h1><div class="race">Run on time · MCM Oct 25, 2026 · sub-3:25</div></div>
+          </div>
+          <div class="stats">
+            <div class="stat"><b>128</b><span>days to go</span></div>
+            <div class="stat"><b>18/26</b><span>mi this week</span></div>
+            <div class="stat"><b>94</b><span>scheduled</span></div>
+          </div>
+          <div class="panel" style="margin-top:0">
+            <h3>Personal Records</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+              <div style="background:var(--t-cell);border-radius:10px;padding:9px 11px"><div style="font-size:10px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.5px">Best mile pace</div><div style="font-size:19px;font-weight:700">8:09/mi</div><div style="font-size:10px;color:var(--t-dim)">Jun 4, 26 · 4.2 mi</div></div>
+              <div style="background:var(--t-cell);border-radius:10px;padding:9px 11px"><div style="font-size:10px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.5px">Best 5K pace</div><div style="font-size:19px;font-weight:700">8:09/mi</div><div style="font-size:10px;color:var(--t-dim)">Jun 4, 26 · 4.2 mi</div></div>
+              <div style="background:var(--t-cell);border-radius:10px;padding:9px 11px"><div style="font-size:10px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.5px">Best 10K pace</div><div style="font-size:19px;font-weight:700">9:01/mi</div><div style="font-size:10px;color:var(--t-dim)">Jun 7, 26 · 8.0 mi</div></div>
+              <div style="background:var(--t-cell);border-radius:10px;padding:9px 11px"><div style="font-size:10px;color:var(--t-faint);text-transform:uppercase;letter-spacing:.5px">Longest run</div><div style="font-size:19px;font-weight:700">8.0 mi</div><div style="font-size:10px;color:var(--t-dim)">Jun 7, 26</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Activities <span style="color:var(--t-dim);font-weight:400">— 4 runs · 18 mi</span></h3>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 8px">
+              <div style="background:var(--t-cell);border-radius:10px;padding:8px;text-align:center"><b style="font-size:16px">18</b><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase">mi · 30d</div></div>
+              <div style="background:var(--t-cell);border-radius:10px;padding:8px;text-align:center"><b style="font-size:16px">75%</b><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase">on target</div></div>
+              <div style="background:var(--t-cell);border-radius:10px;padding:8px;text-align:center"><b style="font-size:16px">4.0</b><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase">avg RPE</div></div>
+            </div>
+            <div style="font-size:11px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.7px;margin:10px 0 6px">Gear</div>
+            <div style="display:flex;justify-content:space-between;font-size:13px"><b>Nimbus 27 <span style="color:var(--t-faint);font-weight:400">· default</span></b><span style="color:var(--t-good)">4 mi</span></div>
+            <div style="background:var(--t-cell);height:5px;border-radius:3px;margin:4px 0 9px"><div style="width:30%;height:5px;border-radius:3px;background:var(--t-good)"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px"><b>asics gel nimbus 27</b><span style="color:var(--t-good)">3 mi</span></div>
+            <div style="background:var(--t-cell);height:5px;border-radius:3px;margin:4px 0 0"><div style="width:25%;height:5px;border-radius:3px;background:var(--t-good)"></div></div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+          <div class="tab"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+          <div class="tab on"><svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
+        </div>
+      </div></div></div>
+      <p class="caption">PRs in a 2×2 of faint micro-labels (note best-mile and best-5K are the same 8:09 — thin-data artifact). Gear bars are 5px and easy to miss.</p>
+    </div>
+
+    <!-- CRITIQUE -->
+    <div>
+      <ul class="crit">
+        <li><span class="n">1</span><b>Records don't feel like records.</b>
+          <p>Each PR is a 10px uppercase label over a 19px number in an identical grey tile. Nothing signals achievement, recency, or which is your proudest. The micro-label colour (<code>--faint #5b6671</code>) fails contrast on the dark tile.</p>
+          <p class="fix">Fix → larger numbers, a hero PR, recency badges ("3 days ago"), and a subtle medal/accent treatment so progress feels celebrated.</p></li>
+        <li><span class="n">2</span><b>The fitness story is told as a paragraph.</b>
+          <p>The "Fitness check: VDOT 47 → projects 3:22…" block (in the live app) is three lines of dense prose with two inline colors. The single most motivating fact — "you're getting faster" — should be a picture, not a sentence.</p>
+          <p class="fix">Fix → a fitness-trajectory card with a sparkline of VDOT/projection over the block, the headline number large, the caveats tucked behind a tap.</p></li>
+        <li><span class="n">3</span><b>Four stacked panels with no scent of what's below.</b>
+          <p>PRs, summary, gear, filters, and the run list all stack in full-bordered boxes. There's no overview-then-detail; you scroll a long single column hunting for the run you want.</p>
+          <p class="fix">Fix → a tight summary header, then let the run history be the main scroll with sticky week dividers.</p></li>
+        <li><span class="n">4</span><b>Gear deserves better than a 5px bar.</b>
+          <p>Shoe mileage and retirement warnings are genuinely useful and easy to miss. The progress bar is barely taller than a hairline.</p>
+          <p class="fix">Fix → a compact gear row with a clear mileage ring and a colour shift as a shoe nears its retirement threshold.</p></li>
+        <li class="win"><span class="n">✓</span><b>What's genuinely good: on-target % and avg RPE are smart KPIs.</b>
+          <p>Most apps show volume. Timely shows <em>quality</em> — adherence and effort. Keep these front and center; just give them a visual identity beyond grey tiles.</p></li>
+      </ul>
+    </div>
+
+    <!-- REDESIGN -->
+    <div>
+      <div class="col-label next"><span class="dot" style="background:#1f9d74"></span>Redesign</div>
+      <div class="phone"><div class="notch"></div><div class="screenarea"><div class="scrollport tl">
+        <div class="statusbar"><span>1:36</span><span class="r">5G ▾ 67%▮</span></div>
+        <div style="position:sticky;top:0;background:rgba(14,17,22,.7);backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,.05);padding:10px 16px 12px;z-index:10"><div style="font-size:16px;font-weight:700;letter-spacing:-.3px">Activities</div></div>
+        <div style="padding:14px 16px 80px">
+          <!-- fitness trajectory hero -->
+          <div style="background:linear-gradient(160deg,#18241d,#121a16);border:1px solid rgba(93,202,165,.2);border-radius:20px;padding:16px;box-shadow:0 20px 44px -30px rgba(93,202,165,.4)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:11px;color:var(--t-easy);font-weight:700;text-transform:uppercase;letter-spacing:.08em">Fitness trending up</div><div style="font-size:26px;font-weight:800;letter-spacing:-.5px;margin-top:4px">Projecting 3:22:40</div><div style="font-size:12px;color:var(--t-good)">3 min ahead of sub-3:25 ✓</div></div></div>
+            <svg viewBox="0 0 300 46" style="width:100%;margin-top:8px"><polyline points="0,38 50,34 100,30 150,28 200,22 250,18 300,12" fill="none" stroke="#5DCAA5" stroke-width="2.5" stroke-linecap="round"/></svg>
+          </div>
+          <!-- KPI strip -->
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:14px;padding:12px 8px;text-align:center"><div style="font-size:18px;font-weight:800">75%</div><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.4px">On target</div></div>
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:14px;padding:12px 8px;text-align:center"><div style="font-size:18px;font-weight:800">4.0</div><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.4px">Avg RPE</div></div>
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:14px;padding:12px 8px;text-align:center"><div style="font-size:18px;font-weight:800">18</div><div style="font-size:9.5px;color:var(--t-dim);text-transform:uppercase;letter-spacing:.4px">Mi · 30d</div></div>
+          </div>
+          <!-- records -->
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin:18px 2px 10px"><span style="font-size:14px;font-weight:700">Records</span><span style="font-size:12px;color:var(--t-accent)">All ›</span></div>
+          <div style="display:flex;gap:10px">
+            <div style="flex:1;background:var(--t-panel);border:1px solid rgba(245,166,35,.3);border-radius:16px;padding:14px"><div style="font-size:11px">🥇 <span style="color:var(--t-dim)">Best 5K pace</span></div><div style="font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:4px">8:09<span style="font-size:13px;color:var(--t-dim)">/mi</span></div><div style="font-size:11px;color:var(--t-faint);margin-top:2px">2 weeks ago</div></div>
+            <div style="flex:1;background:var(--t-panel);border:1px solid var(--t-line);border-radius:16px;padding:14px"><div style="font-size:11px;color:var(--t-dim)">Longest run</div><div style="font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:4px">8.0<span style="font-size:13px;color:var(--t-dim)"> mi</span></div><div style="font-size:11px;color:var(--t-faint);margin-top:2px">Jun 7</div></div>
+          </div>
+          <!-- gear -->
+          <div style="font-size:14px;font-weight:700;margin:18px 2px 10px">Gear</div>
+          <div style="display:flex;align-items:center;gap:12px;background:var(--t-panel);border:1px solid var(--t-line);border-radius:14px;padding:12px 14px"><span style="font-size:18px">👟</span><div style="flex:1"><div style="font-size:13.5px;font-weight:600">Nimbus 27 <span style="color:var(--t-faint);font-weight:400">· default</span></div><div style="background:var(--t-cell);height:6px;border-radius:4px;margin-top:6px"><div style="width:32%;height:6px;border-radius:4px;background:var(--t-good)"></div></div></div><div style="text-align:right"><div style="font-size:14px;font-weight:700">142</div><div style="font-size:10px;color:var(--t-faint)">/ 450 mi</div></div></div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+          <div class="tab"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+          <div class="tab on"><svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
+        </div>
+      </div></div></div>
+      <p class="caption">The fitness story leads as a picture, not a paragraph. KPIs get identity, the proudest PR is hero'd with a medal, and gear reads at a glance with a real mileage scale.</p>
+    </div>
+  </div>
+</div></section>
+
+<!-- ================= SYSTEM ================= -->
+<section id="system"><div class="wrap">
+  <p class="kicker">Zooming out</p>
+  <h2>The system, and where I'd start.</h2>
+  <p class="lead">The individual screens share a small set of root causes. Fix these at the system level and every screen improves at once.</p>
+
+  <div class="tenets" style="margin-top:30px">
+    <div class="tenet"><div class="no">A</div><h4>Build a depth scale, retire the boxes</h4>
+      <p>Replace "every section = bordered panel" with three elevation levels: base content, raised cards (soft shadow, no border), and floating glass (blurred, for headers/sheets). Hierarchy by depth, not outline.</p></div>
+    <div class="tenet"><div class="no">B</div><h4>Give color a job description</h4>
+      <p>Mint = your action / on-track. Coral = coach voice. Workout-type colors = small dots only. Amber/red = warnings only. One semantic system, applied everywhere.</p></div>
+    <div class="tenet"><div class="no">C</div><h4>Ship a type scale</h4>
+      <p>Today there are ~12 ad-hoc font sizes set inline. Define six steps (Display, Title, Headline, Body, Caption, Micro) and ban inline sizes. Instant consistency and rhythm.</p></div>
+    <div class="tenet"><div class="no">D</div><h4>Kill the per-tab hero</h4>
+      <p>One slim, shared glass header. Stats live where they're relevant (week progress on Today/Plan), not triplicated as a branding band on every tab.</p></div>
+    <div class="tenet"><div class="no">E</div><h4>Make errors humane</h4>
+      <p>No raw error objects, ever. Catch, translate, preserve user input, and queue writes offline. "[object Object]" should be impossible by construction.</p></div>
+    <div class="tenet"><div class="no">F</div><h4>One effort component, with motion</h4>
+      <p>A single tactile RPE control used in every place a run is rated, with haptics and a spring on select. Consistency plus a moment of delight on the action you most want completed.</p></div>
+  </div>
+
+  <h3>If I could only ship three things this month</h3>
+  <p style="max-width:820px"><b>1 — Fix the save error and the rating moment (Screen 03).</b> Highest trust-per-hour: stop showing <code>[object Object]</code>, preserve notes, and replace the slider with tactile effort segments. <br><br><b>2 — Promote one hero on Today (Screen 01).</b> Collapse the stack so "what's my run, am I ready" is answered in half a second. <br><br><b>3 — Introduce the depth + type + color system (A, B, C).</b> A small set of tokens that every screen inherits — the cheapest way to make the whole app feel designed rather than assembled.</p>
+
+  <p class="muted" style="margin-top:26px;font-size:14px">Scope held to a mobile web PWA throughout — every pattern here (backdrop-blur glass, soft-shadow cards, sticky headers, bottom sheets, CSS transitions, the Vibration API for haptics) ships in mobile Safari today. Nothing here requires going native.</p>
+</div></section>
+
+<footer><div class="wrap">
+  Timely design review · prepared for Earwin · June 2026 · mobile web PWA scope.
+</div></footer>
+</body></html>

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Block direct commits to main. Agents work on a branch and open a PR so the
+# infra/product work is reviewable before it lands. See AGENTS.md.
+# Deliberate bootstrap only: git commit --no-verify
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$branch" = "main" ]; then
+  echo "✋ Direct commits to 'main' are blocked (AGENTS.md › Parallel agents)."
+  echo "   git switch -c feat/<change>   # work on a branch"
+  echo "   then push and open a PR — CI + review gate main."
+  exit 1
+fi
+exit 0

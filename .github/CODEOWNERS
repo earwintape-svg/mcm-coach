@@ -1,0 +1,17 @@
+# CODEOWNERS — mirrors AGENTS.md. Takes effect once PRs + branch protection
+# are enabled (see ENGINEERING_REVIEW_TASKS.md T4). Replace @OWNER with the
+# repo owner's GitHub handle.
+#
+# Until branch protection is on, AGENTS.md is the operative contract.
+
+# Default: everything is RESTRICTED code and needs engineering review.
+*                       @OWNER
+
+# Engineering reference docs — eng-owned.
+/README.md              @OWNER
+/ARCHITECTURE.md        @OWNER
+
+# 🟢 OPEN zones — no required reviewer (product/design agents edit freely).
+# Listing them last with no owner clears the default rule above.
+/product/
+/design/
