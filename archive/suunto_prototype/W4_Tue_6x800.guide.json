@@ -1,0 +1,136 @@
+{
+  "type": "sequence",
+  "name": "W4 Tue 6x800",
+  "description": "6x800 \u2014 Week 4 Tue. From timely's MCM 2026 plan.",
+  "shortDescription": "MCM26 W4",
+  "owner": "timely",
+  "url": "https://github.com/",
+  "activities": [
+    1
+  ],
+  "usage": "workout",
+  "steps": [
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 2414.01,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 2.555,
+          "max": 2.823,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 2414.01
+          }
+        }
+      ],
+      "title": "Warmup",
+      "notification": {
+        "title": "Warmup",
+        "text": "Warmup"
+      }
+    },
+    {
+      "type": "repeat",
+      "times": 6,
+      "steps": [
+        {
+          "type": "fields",
+          "fields": [
+            {
+              "type": "stepDistanceCountdown",
+              "value": 800.0,
+              "title": "To go"
+            },
+            {
+              "type": "targetPace",
+              "min": 3.743,
+              "max": 4.074,
+              "title": "Pace"
+            }
+          ],
+          "transitions": [
+            {
+              "condition": {
+                "type": "stepDistance",
+                "value": 800.0
+              }
+            }
+          ],
+          "title": "On pace,",
+          "notification": {
+            "title": "On pace,",
+            "text": "On pace, controlled"
+          }
+        },
+        {
+          "type": "fields",
+          "fields": [
+            {
+              "type": "stepDistanceCountdown",
+              "value": 400.0,
+              "title": "To go"
+            },
+            {
+              "type": "pace",
+              "title": "Pace"
+            }
+          ],
+          "transitions": [
+            {
+              "condition": {
+                "type": "stepDistance",
+                "value": 400.0
+              }
+            }
+          ],
+          "title": "Easy jog",
+          "notification": {
+            "title": "Easy jog",
+            "text": "Easy jog recovery"
+          }
+        }
+      ]
+    },
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 2414.01,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 2.555,
+          "max": 2.823,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 2414.01
+          }
+        }
+      ],
+      "title": "Cooldown",
+      "notification": {
+        "title": "Cooldown",
+        "text": "Cooldown"
+      }
+    }
+  ],
+  "localDate": "2026-07-07",
+  "externalId": "timely-w4-tue"
+}

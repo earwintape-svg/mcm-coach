@@ -1,0 +1,74 @@
+{
+  "type": "sequence",
+  "name": "W7 Sat 16mi MP Finish",
+  "description": "16mi MP Finish \u2014 Week 7 Sat. From timely's MCM 2026 plan.",
+  "shortDescription": "MCM26 W7",
+  "owner": "timely",
+  "url": "https://github.com/",
+  "activities": [
+    1
+  ],
+  "usage": "workout",
+  "steps": [
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 19312.08,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 2.823,
+          "max": 3.065,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 19312.08
+          }
+        }
+      ],
+      "title": "Long run \u2014",
+      "notification": {
+        "title": "Long run \u2014",
+        "text": "Long run \u2014 steady"
+      }
+    },
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 6437.36,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 3.388,
+          "max": 3.461,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 6437.36
+          }
+        }
+      ],
+      "title": "Marathon",
+      "notification": {
+        "title": "Marathon",
+        "text": "Marathon pace finish"
+      }
+    }
+  ],
+  "localDate": "2026-08-01",
+  "externalId": "timely-w7-sat"
+}

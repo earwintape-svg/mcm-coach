@@ -1,0 +1,58 @@
+[
+  {
+    "category": "WORKOUT",
+    "start_date_local": "2026-06-15T00:00:00",
+    "type": "Run",
+    "name": "W1 Mon 4mi Easy",
+    "description": "W1 Mon 4mi Easy\n\n- Easy \u2014 conversational 6437mtr",
+    "external_id": "timely-w1-mon"
+  },
+  {
+    "category": "WORKOUT",
+    "start_date_local": "2026-06-16T00:00:00",
+    "type": "Run",
+    "name": "W1 Tue 5mi Strides",
+    "description": "W1 Tue 5mi Strides\n\n- Easy \u2014 conversational 7242mtr\n\n4x\n- Stride \u2014 fast, relaxed 100mtr 6:30/mi-7:00/mi Pace\n- Walk it off 1m\n\n- Easy cooldown 402mtr",
+    "external_id": "timely-w1-tue"
+  },
+  {
+    "category": "WORKOUT",
+    "start_date_local": "2026-06-30T00:00:00",
+    "type": "Run",
+    "name": "W3 Tue 8x Cat Hill",
+    "description": "W3 Tue 8x Cat Hill\n\n- Warmup 2414mtr 9:30/mi-10:30/mi Pace\n\n8x\n- Cat Hill \u2014 strong uphill 320mtr 7:00/mi-7:40/mi Pace\n- Jog down recovery 320mtr\n\n- Cooldown 2414mtr 9:30/mi-10:30/mi Pace",
+    "external_id": "timely-w3-tue"
+  },
+  {
+    "category": "WORKOUT",
+    "start_date_local": "2026-07-02T00:00:00",
+    "type": "Run",
+    "name": "W3 Thu Tempo 2mi",
+    "description": "W3 Thu Tempo 2mi\n\n- Warmup 2414mtr 9:30/mi-10:30/mi Pace\n\n- Tempo \u2014 comfortably hard 3219mtr 7:35/mi-7:50/mi Pace\n\n- Cooldown 2414mtr 9:30/mi-10:30/mi Pace",
+    "external_id": "timely-w3-thu"
+  },
+  {
+    "category": "WORKOUT",
+    "start_date_local": "2026-07-07T00:00:00",
+    "type": "Run",
+    "name": "W4 Tue 6x800",
+    "description": "W4 Tue 6x800\n\n- Warmup 2414mtr 9:30/mi-10:30/mi Pace\n\n6x\n- On pace, controlled 800mtr 6:35/mi-7:10/mi Pace\n- Easy jog recovery 400mtr\n\n- Cooldown 2414mtr 9:30/mi-10:30/mi Pace",
+    "external_id": "timely-w4-tue"
+  },
+  {
+    "category": "WORKOUT",
+    "start_date_local": "2026-08-01T00:00:00",
+    "type": "Run",
+    "name": "W7 Sat 16mi MP Finish",
+    "description": "W7 Sat 16mi MP Finish\n\n- Long run \u2014 steady 19312mtr 8:45/mi-9:30/mi Pace\n\n- Marathon pace finish 6437mtr 7:45/mi-7:55/mi Pace",
+    "external_id": "timely-w7-sat"
+  },
+  {
+    "category": "WORKOUT",
+    "start_date_local": "2026-08-29T00:00:00",
+    "type": "Run",
+    "name": "W11 Sat 20mi LR",
+    "description": "W11 Sat 20mi LR\n\n- Long run \u2014 steady 32187mtr 8:45/mi-9:30/mi Pace",
+    "external_id": "timely-w11-sat"
+  }
+]

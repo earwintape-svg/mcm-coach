@@ -1,0 +1,136 @@
+{
+  "type": "sequence",
+  "name": "W3 Tue 8x Cat Hill",
+  "description": "8x Cat Hill \u2014 Week 3 Tue. From timely's MCM 2026 plan.",
+  "shortDescription": "MCM26 W3",
+  "owner": "timely",
+  "url": "https://github.com/",
+  "activities": [
+    1
+  ],
+  "usage": "workout",
+  "steps": [
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 2414.01,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 2.555,
+          "max": 2.823,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 2414.01
+          }
+        }
+      ],
+      "title": "Warmup",
+      "notification": {
+        "title": "Warmup",
+        "text": "Warmup"
+      }
+    },
+    {
+      "type": "repeat",
+      "times": 8,
+      "steps": [
+        {
+          "type": "fields",
+          "fields": [
+            {
+              "type": "stepDistanceCountdown",
+              "value": 320.0,
+              "title": "To go"
+            },
+            {
+              "type": "targetPace",
+              "min": 3.499,
+              "max": 3.832,
+              "title": "Pace"
+            }
+          ],
+          "transitions": [
+            {
+              "condition": {
+                "type": "stepDistance",
+                "value": 320.0
+              }
+            }
+          ],
+          "title": "Cat Hill \u2014",
+          "notification": {
+            "title": "Cat Hill \u2014",
+            "text": "Cat Hill \u2014 strong uphill"
+          }
+        },
+        {
+          "type": "fields",
+          "fields": [
+            {
+              "type": "stepDistanceCountdown",
+              "value": 320.0,
+              "title": "To go"
+            },
+            {
+              "type": "pace",
+              "title": "Pace"
+            }
+          ],
+          "transitions": [
+            {
+              "condition": {
+                "type": "stepDistance",
+                "value": 320.0
+              }
+            }
+          ],
+          "title": "Jog down",
+          "notification": {
+            "title": "Jog down",
+            "text": "Jog down recovery"
+          }
+        }
+      ]
+    },
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 2414.01,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 2.555,
+          "max": 2.823,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 2414.01
+          }
+        }
+      ],
+      "title": "Cooldown",
+      "notification": {
+        "title": "Cooldown",
+        "text": "Cooldown"
+      }
+    }
+  ],
+  "localDate": "2026-06-30",
+  "externalId": "timely-w3-tue"
+}

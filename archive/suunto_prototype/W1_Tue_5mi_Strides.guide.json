@@ -1,0 +1,132 @@
+{
+  "type": "sequence",
+  "name": "W1 Tue 5mi Strides",
+  "description": "5mi Strides \u2014 Week 1 Tue. From timely's MCM 2026 plan.",
+  "shortDescription": "MCM26 W1",
+  "owner": "timely",
+  "url": "https://github.com/",
+  "activities": [
+    1
+  ],
+  "usage": "workout",
+  "steps": [
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 7242.03,
+          "title": "To go"
+        },
+        {
+          "type": "pace",
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 7242.03
+          }
+        }
+      ],
+      "title": "Easy \u2014",
+      "notification": {
+        "title": "Easy \u2014",
+        "text": "Easy \u2014 conversational"
+      }
+    },
+    {
+      "type": "repeat",
+      "times": 4,
+      "steps": [
+        {
+          "type": "fields",
+          "fields": [
+            {
+              "type": "stepDistanceCountdown",
+              "value": 100.0,
+              "title": "To go"
+            },
+            {
+              "type": "targetPace",
+              "min": 3.832,
+              "max": 4.127,
+              "title": "Pace"
+            }
+          ],
+          "transitions": [
+            {
+              "condition": {
+                "type": "stepDistance",
+                "value": 100.0
+              }
+            }
+          ],
+          "title": "Stride \u2014",
+          "notification": {
+            "title": "Stride \u2014",
+            "text": "Stride \u2014 fast, relaxed"
+          }
+        },
+        {
+          "type": "fields",
+          "fields": [
+            {
+              "type": "stepDurationCountdown",
+              "value": 60.0,
+              "title": "To go"
+            },
+            {
+              "type": "pace",
+              "title": "Pace"
+            }
+          ],
+          "transitions": [
+            {
+              "condition": {
+                "type": "stepDuration",
+                "value": 60.0
+              }
+            }
+          ],
+          "title": "Walk it off",
+          "notification": {
+            "title": "Walk it off",
+            "text": "Walk it off"
+          }
+        }
+      ]
+    },
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 402.33,
+          "title": "To go"
+        },
+        {
+          "type": "pace",
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 402.33
+          }
+        }
+      ],
+      "title": "Easy cooldown",
+      "notification": {
+        "title": "Easy cooldown",
+        "text": "Easy cooldown"
+      }
+    }
+  ],
+  "localDate": "2026-06-16",
+  "externalId": "timely-w1-tue"
+}

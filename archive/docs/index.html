@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>timely — run on time</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23101418'/%3E%3Cpath d='M20 20 L33 32 L20 44' fill='none' stroke='%235DCAA5' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M36 24 L46 32 L36 40' fill='none' stroke='%23F0997B' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e1116">
+<style>
+ :root{
+  --bg:#0e1116; --panel:#161b22; --cell:#11151b; --line:#232a33;
+  --tx:#f0f3f6; --dim:#93a0ad; --faint:#5b6671;
+  --easy:#34c77b; --strides:#3ec6c0; --long:#5aa2ff; --tempo:#f5a623;
+  --hard:#ff6b6b; --accent:#5DCAA5; --accent2:#F0997B; --good:#34c77b;
+  --oninvert:#06231b;
+ }
+ *{box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+ body{margin:0;background:var(--bg);color:var(--tx);
+  font:14px/1.45 -apple-system,'SF Pro Text',Helvetica,Arial,sans-serif;
+  padding-top:env(safe-area-inset-top)}
+ .wrap{max-width:1140px;margin:0 auto;padding:22px 18px 70px}
+
+ .hero{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:16px}
+ .hero h1{font-size:24px;font-weight:700;letter-spacing:-.4px;margin:0}
+ .hero .race{color:var(--dim);font-size:13px;margin-top:3px}
+ .stats{display:flex;gap:10px;margin-left:auto;flex-wrap:wrap}
+ .stat{background:var(--panel);border:1px solid var(--line);border-radius:13px;
+  padding:9px 16px;text-align:center;min-width:88px}
+ .stat b{display:block;font-size:20px;letter-spacing:-.5px}
+ .stat span{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+
+ /* tab navigation — pills on desktop, fixed bottom bar on mobile */
+ .tabbar{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
+  border-radius:999px;padding:4px;width:fit-content;margin:0 0 16px;z-index:40}
+ .tab{display:flex;gap:7px;align-items:center;padding:8px 18px;border-radius:999px;
+  color:var(--dim);font-size:13px;font-weight:600;cursor:pointer;user-select:none}
+ .tab svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;
+  stroke-linecap:round;stroke-linejoin:round}
+ .tab.active{background:var(--accent);color:var(--oninvert)}
+ .wd.sel{background:#1b222b;box-shadow:inset 0 0 0 1.5px var(--accent)}
+ .wstrip{display:flex;gap:2px;background:var(--panel);border:1px solid var(--line);
+  border-radius:15px;padding:10px 6px 8px;margin-bottom:12px}
+ .wd{flex:1;text-align:center;cursor:pointer;border-radius:10px;padding:4px 0}
+ .wd:hover{background:#1b222b}
+ .wd .l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+ .wd .n{font-size:14px;font-weight:600;margin:4px 0 3px;width:28px;height:28px;line-height:28px;
+  border-radius:50%;display:inline-block}
+ .wd.today .n{background:var(--accent);color:#fff}
+ .wd .dots{height:10px;display:flex;gap:3px;justify-content:center;align-items:center}
+ .wd .dots i{width:7px;height:7px;border-radius:4px;display:inline-block}
+ .wd .dots .ck{color:var(--good);font-size:10px;font-weight:800;line-height:10px}
+ .brief{background:linear-gradient(135deg,#1a2433,#16202c);border:1px solid #27384d;
+  border-radius:15px;padding:15px 18px 14px 22px;margin-bottom:14px;position:relative;overflow:hidden}
+ .brief::before{content:'';position:absolute;left:0;top:0;bottom:0;width:6px;
+  background:var(--bcolor,var(--easy))}
+ .brief .top{display:flex;gap:12px;align-items:flex-start}
+ .brief b{font-size:18px;letter-spacing:-.3px}
+ .brief .sub{color:var(--dim);font-size:13px;margin-top:3px}
+ .wx{background:#11161b;border:1px solid var(--line);border-radius:999px;
+  padding:6px 12px;font-size:13px;white-space:nowrap;margin-left:auto;flex:none}
+ .donechip{background:var(--good);color:#06210f;border-radius:999px;padding:6px 12px;
+  font-size:12.5px;font-weight:700;margin-left:auto;flex:none}
+ .brief .cta{margin-top:11px;display:flex;gap:8px}
+ .ready{display:flex;gap:14px;margin-top:9px;flex-wrap:wrap;color:var(--dim);font-size:12.5px}
+ .ready b{color:var(--tx);font-weight:600}
+ .banner{border-radius:12px;padding:10px 15px;margin-bottom:14px;font-size:13.5px;display:none}
+ .banner.amber{display:block;background:#2c2410;border:1px solid #4d3f1c;color:#f0d28a}
+ .banner.red{display:block;background:#2d1515;border:1px solid #553030;color:#f3a9a0}
+
+ .bar{display:flex;align-items:center;gap:9px;margin-bottom:12px;flex-wrap:wrap}
+ .mnav{display:flex;align-items:center;gap:2px;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;padding:2px}
+ .mnav b{min-width:118px;text-align:center;font-size:14px}
+ button{background:var(--panel);color:var(--tx);border:1px solid var(--line);
+  border-radius:9px;padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+ button:hover{border-color:var(--accent)}
+ button.primary{background:var(--accent);border-color:var(--accent);color:var(--oninvert);font-weight:600}
+ .seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px}
+ .seg button{border:none;background:none;padding:6px 14px;border-radius:8px;color:var(--dim);font-weight:600}
+ .seg button.on{background:var(--accent);color:var(--oninvert)}
+ button.ghost{border:none;background:none;color:var(--accent);font-weight:600;padding:8px 9px}
+ .legend{margin-left:auto;display:flex;gap:11px;color:var(--dim);font-size:11.5px;flex-wrap:wrap}
+ .legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px}
+
+ .cal{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+ .dow,.grid{display:grid;grid-template-columns:repeat(7,1fr)}
+ .dow div{padding:9px 0 7px;text-align:center;font-size:10.5px;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--line)}
+ .cell{min-height:92px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+  padding:5px;background:var(--cell);transition:background .12s}
+ .cell:nth-child(7n){border-right:none}
+ .cell.other{opacity:.35}
+ .cell.over,.movemode .cell:hover{background:#1b2533;box-shadow:inset 0 0 0 2px var(--accent)}
+ .movemode .cell{cursor:copy}
+ .dnum{font-size:11.5px;color:var(--faint);margin:0 0 4px 3px;display:flex;align-items:center;gap:5px}
+ .cell.today .dnum b{background:var(--accent);color:#fff;border-radius:50%;
+  width:21px;height:21px;display:inline-flex;align-items:center;justify-content:center;font-size:11.5px}
+ .ran{color:var(--good);font-size:10.5px;font-weight:700}
+ .chip{border-radius:8px;padding:5px 7px;margin-bottom:4px;font-size:11.5px;font-weight:600;
+  cursor:grab;color:#08130d;position:relative;line-height:1.25;user-select:none}
+ .chip:active{cursor:grabbing}
+ .chip .mi{display:block;font-weight:500;font-size:10.5px;opacity:.75}
+ .chip.dragging{opacity:.4}
+ .chip.past{filter:grayscale(.5);opacity:.6}
+ .chip .warn{position:absolute;top:-6px;right:-4px;font-size:11px}
+ .c-easy{background:var(--easy)} .c-strides{background:var(--strides)}
+ .c-long{background:var(--long);color:#071120} .c-tempo{background:var(--tempo)}
+ .c-hard{background:var(--hard);color:#1c0707}
+ .skel{padding:42px;text-align:center;color:var(--faint);grid-column:1/-1}
+ .skel i{display:inline-block;width:16px;height:16px;border:2px solid var(--faint);
+  border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;
+  vertical-align:-3px;margin-right:9px}
+ @keyframes sp{to{transform:rotate(360deg)}}
+
+ .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:15px 17px;margin-top:16px}
+ .panel h3{margin:0 0 9px;font-size:15px}
+ .rampnote{color:var(--dim);font-size:12.5px;margin-top:7px}
+
+ .scrim{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;
+  align-items:center;justify-content:center;z-index:50;padding:16px}
+ .scrim.show{display:flex}
+ .modal{background:var(--panel);border:1px solid var(--line);border-radius:18px;
+  padding:21px;width:390px;max-width:94vw;max-height:84vh;overflow:auto}
+ .modal h3{margin:0 0 4px;font-size:17px}
+ .modal p{color:var(--dim);margin:0 0 14px;font-size:13px}
+ .modal label{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px}
+ .modal input{width:100%;background:var(--cell);border:1px solid var(--line);color:var(--tx);
+  border-radius:9px;padding:10px 11px;font-size:16px;font-family:inherit} /* 16px stops iOS zoom-on-focus */
+ .modal .preview{background:var(--cell);border-radius:10px;padding:10px 12px;margin-top:12px;
+  font-size:13px;color:var(--dim);max-height:150px;overflow:auto;line-height:1.6}
+ .modal .row{display:flex;gap:9px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+ /* run sheet */
+ .runsheet{width:560px}
+ .runsheet h4{margin:16px 0 6px;font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.7px}
+ .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:12px 0 2px}
+ .statgrid div{background:var(--cell);border-radius:10px;padding:9px 11px}
+ .statgrid b{display:block;font-size:17px;letter-spacing:-.3px}
+ .statgrid span{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+ .lapbars{display:flex;align-items:flex-end;gap:3px;height:110px;margin:6px 0 2px;position:relative}
+ .lapbars .b{flex:1;background:var(--good);border-radius:3px 3px 0 0;min-width:3px;opacity:.92;position:relative;z-index:1}
+ .lapbars .tband{position:absolute;left:0;right:0;background:rgba(255,255,255,.14);border-radius:3px;z-index:0}
+ .chartwrap{position:relative;touch-action:pan-y;overscroll-behavior-x:none;cursor:crosshair}
+ .chartwrap svg{display:block;margin-bottom:6px}
+ .ctip{position:absolute;background:#222b36;border:1px solid var(--line);border-radius:8px;
+  padding:5px 9px;font-size:11.5px;white-space:nowrap;pointer-events:none;display:none;
+  z-index:5;transform:translate(-50%,0)}
+ .selstats{background:var(--cell);border-radius:9px;padding:7px 11px;font-size:12.5px;
+  margin:2px 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+ .splitrow.on{background:#1d2733;border-radius:8px}
+ .zrow{display:flex;align-items:center;gap:9px;font-size:11.5px;margin:4px 0}
+ .zrow .zl{width:84px;color:var(--dim);flex:none}
+ .zrow .zt{width:74px;text-align:right;color:var(--dim);flex:none}
+ .zrow .zbar{flex:1;background:var(--cell);border-radius:4px;height:9px}
+ .zrow .zbar i{display:block;height:9px;border-radius:4px}
+ .splitrow{display:flex;align-items:center;gap:8px;padding:3px 4px;font-size:12.5px;cursor:pointer}
+ .splitrow .n{width:34px;color:var(--dim);flex:none;text-align:right}
+ .splitrow .bar{height:23px;border-radius:6px;background:var(--strides);color:#06221f;font-weight:600;
+  display:flex;align-items:center;padding:0 8px;font-size:12px;white-space:nowrap}
+ .splitrow .pm{width:52px;text-align:right;font-size:12px}
+ #toast{position:fixed;bottom:max(20px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+  background:#222b36;border:1px solid var(--line);color:var(--tx);border-radius:12px;
+  padding:11px 16px;display:none;align-items:center;gap:13px;z-index:60;
+  box-shadow:0 8px 30px rgba(0,0,0,.5);font-size:13px;max-width:92vw}
+ #toast.err{border-color:var(--hard)}
+
+ @media (max-width:700px){
+  .wrap{padding:max(12px,env(safe-area-inset-top)) 10px 96px}
+  .tabbar{position:fixed;bottom:0;left:0;right:0;width:auto;margin:0;border-radius:0;
+   border:none;border-top:1px solid var(--line);background:rgba(14,17,22,.97);
+   -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+   padding:7px 0 calc(7px + env(safe-area-inset-bottom, 16px))}
+  .tab{flex:1;flex-direction:column;gap:3px;padding:2px 0;font-size:10px;border-radius:0}
+  .tab svg{width:22px;height:22px}
+  .tab.active{background:none;color:var(--accent)}
+  .hero{gap:12px;margin-bottom:12px}
+  .hero h1{font-size:21px}
+  .hero .race{font-size:12px}
+  .stats{margin-left:0;width:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .stat{min-width:0;padding:9px 6px}.stat b{font-size:19px}
+  .legend{margin-left:0;width:100%;order:9}
+  .bar{gap:7px}
+  .bar button{padding:9px 12px}            /* >=44pt tap targets */
+  .mnav b{min-width:104px}
+  .cell{min-height:76px;padding:3px 2px}
+  .dnum{font-size:10.5px;margin-left:2px}
+  .cell.today .dnum b{width:19px;height:19px;font-size:10.5px}
+  .ran{font-size:9.5px}
+  .chip{font-size:10.5px;padding:5px 5px;border-radius:6px}
+  .chip .mi{display:none}
+  /* modals become bottom sheets — the native-app gesture language */
+  .scrim{align-items:flex-end;padding:0}
+  .modal{width:100%;max-width:100%;max-height:88vh;border-radius:18px 18px 0 0;
+   padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+  .runsheet{width:100%}
+  .statgrid b{font-size:15px}
+  .splitrow .pm{width:46px}
+ }
+</style></head><body><div class="wrap">
+
+ <div class="hero">
+   <div style="display:flex;align-items:center;gap:12px">
+   <svg width="42" height="42" viewBox="0 0 64 64" aria-label="timely logo"><rect width="64" height="64" rx="14" fill="#101418" stroke="#232a33"/><path d="M20 20 L33 32 L20 44" fill="none" stroke="#5DCAA5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 24 L46 32 L36 40" fill="none" stroke="#F0997B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+   <div><h1 style="letter-spacing:-.6px">timely</h1>
+   <div class="race">Run on time · MCM Oct 25, 2026 · sub-3:25</div></div></div>
+   <div class="stats">
+     <div class="stat"><b id="cdays">—</b><span>days to go</span></div>
+     <div class="stat"><b id="wkmi">—</b><span>mi this week</span></div>
+     <div class="stat"><b id="nsched">—</b><span>scheduled</span></div>
+   </div>
+ </div>
+
+ <nav class="tabbar">
+  <div class="tab active" data-v="today" onclick="setView('today')">
+   <svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+  <div class="tab" data-v="plan" onclick="setView('plan')">
+   <svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+  <div class="tab" data-v="acts" onclick="setView('acts')">
+   <svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
+ </nav>
+
+ <div id="v-today">
+ <div class="wstrip" id="wstrip"></div>
+ <div class="brief" id="reviewcard" style="display:none;--bcolor:var(--accent)"></div>
+ <div class="brief" id="coachcard" style="display:none;--bcolor:var(--accent2)"></div>
+ <div class="banner" id="banner"></div>
+ <div class="brief" id="brief" style="display:none"></div>
+ <div class="panel" id="weekpanel" style="display:none"></div>
+ <div class="panel" id="trendpanel" style="display:none"></div>
+ </div>
+
+ <div id="v-plan" style="display:none">
+ <div class="bar">
+   <div class="seg">
+     <button id="segList" onclick="setPlanMode('list')">List</button>
+     <button id="segMonth" onclick="setPlanMode('month')">Month</button>
+   </div>
+   <div class="mnav" id="mnav">
+     <button class="ghost" onclick="nav(-1)">‹</button>
+     <b id="mlabel"></b>
+     <button class="ghost" onclick="nav(1)">›</button>
+   </div>
+   <button onclick="openVacation()">Vacation</button>
+   <button onclick="load(true)" aria-label="refresh">↻</button>
+   <div class="legend">
+     <span><i style="background:var(--easy)"></i>Easy</span>
+     <span><i style="background:var(--strides)"></i>Strides</span>
+     <span><i style="background:var(--tempo)"></i>Tempo·Hills</span>
+     <span><i style="background:var(--hard)"></i>Intervals</span>
+     <span><i style="background:var(--long)"></i>Long</span>
+   </div>
+ </div>
+
+ <div class="cal" id="calwrap">
+   <div class="dow"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div>
+     <div>Fri</div><div>Sat</div><div>Sun</div></div>
+   <div class="grid" id="grid"><div class="skel"><i></i>Loading your calendar from Garmin…</div></div>
+ </div>
+ <div class="panel" id="planlist" style="display:none;margin-top:0"></div>
+
+ <div class="panel"><h3>Weekly mileage — planned vs run</h3>
+   <div id="chart"></div><div class="rampnote" id="rampnote"></div></div>
+ </div>
+
+ <div id="v-acts" style="display:none">
+ <div class="panel" id="actpanel"><h3>Activities</h3></div>
+ </div>
+
+ <div class="scrim" id="scrim">
+  <div class="modal">
+    <h3>Vacation mode</h3>
+    <p>Pick the days you'll be away. Timely plans around it: easy runs get
+       dropped (they're filler), key sessions get moved to clean days after
+       you're back — never stacking two hard days. Preview, then apply.</p>
+    <label>Away from</label><input type="date" id="vfrom">
+    <label>Until</label><input type="date" id="vto">
+    <div class="preview" id="vpreview">Pick dates to preview.</div>
+    <div class="row">
+      <button onclick="closeVacation()">Cancel</button>
+      <button class="primary" id="vgo" onclick="doVacation()" disabled>Apply plan</button>
+    </div>
+  </div>
+ </div>
+
+ <div class="scrim" id="dscrim" onclick="if(event.target===this)closeDetail()">
+  <div class="modal" id="dmodal"></div>
+ </div>
+
+ <div class="scrim" id="rscrim" onclick="if(event.target===this)closeRun()">
+  <div class="modal runsheet" id="rmodal"></div>
+ </div>
+
+ <div id="toast"></div>
+
+<script>const DEMO={"data": {"plan": {"race": "2026-10-25", "start": "2026-06-15", "today": "2026-07-23", "plannedWeekly": {"1": 26.0, "2": 29.0, "3": 32.2, "4": 35.5, "5": 35.2, "6": 30.5, "7": 40.0, "8": 42.0, "9": 31.5, "10": 47.0, "11": 50.5, "12": 41.2, "13": 51.0, "14": 48.2, "15": 38.0, "16": 31.5, "17": 26.4, "18": 20.0, "19": 8.0}, "planMiles": {"W1 Mon 4mi Easy": 4.0, "W1 Tue 5mi Strides": 5.0, "W1 Thu 4mi Easy": 4.0, "W1 Fri 5mi Easy": 5.0, "W1 Sat 8mi LR": 8.0, "W2 Mon 4mi Easy": 4.0, "W2 Tue 5mi Strides": 5.0, "W2 Thu 5mi Easy": 5.0, "W2 Fri 6mi Easy": 6.0, "W2 Sat 9mi LR": 9.0, "W3 Mon 5mi Easy": 5.0, "W3 Tue 8x Cat Hill": 6.2, "W3 Thu Tempo 2mi": 5.0, "W3 Fri 6mi Easy": 6.0, "W3 Sat 10mi LR": 10.0, "W4 Mon 5mi Easy": 5.0, "W4 Tue 6x800": 7.5, "W4 Thu Tempo 3mi": 6.0, "W4 Fri 6mi Easy": 6.0, "W4 Sat 11mi LR": 11.0, "W5 Mon 5mi Easy": 5.0, "W5 Tue Mixed Hills": 6.2, "W5 Thu Tempo 3mi": 6.0, "W5 Fri 6mi Easy": 6.0, "W5 Sat 12mi LR": 12.0, "W6 Mon 4mi Easy": 4.0, "W6 Tue 4x1km": 6.5, "W6 Thu Tempo 3mi": 6.0, "W6 Fri 4mi Easy": 4.0, "W6 Sat 10mi LR": 10.0, "W7 Mon 5mi Easy": 5.0, "W7 Tue 5x Harlem Hill": 7.0, "W7 Thu Tempo 4mi": 7.0, "W7 Fri 5mi Easy": 5.0, "W7 Sat 16mi MP Finish": 16.0, "W8 Mon 5mi Easy": 5.0, "W8 Tue 4x1200": 7.0, "W8 Thu Tempo 5mi": 8.0, "W8 Fri 5mi Easy": 5.0, "W8 Sat 17mi MP Finish": 17.0, "W9 Mon 4mi Easy": 4.0, "W9 Tue 6x800": 7.5, "W9 Thu Tempo 3mi": 6.0, "W9 Fri 4mi Easy": 4.0, "W9 Sat 10mi LR": 10.0, "W10 Mon 6mi Easy": 6.0, "W10 Tue 5x Harlem Hill": 7.0, "W10 Thu Tempo 6mi": 9.0, "W10 Fri 7mi Easy": 7.0, "W10 Sat 18mi MP Finish": 18.0, "W11 Mon 5mi Easy": 5.0, "W11 Tue 5x Mile": 10.5, "W11 Thu Tempo 6mi": 9.0, "W11 Fri 6mi Easy": 6.0, "W11 Sat 20mi LR": 20.0, "W12 Mon 6mi Easy": 6.0, "W12 Tue 8x Cat Hill": 6.2, "W12 Thu Tempo 5mi": 8.0, "W12 Fri 7mi Easy": 7.0, "W12 Sat 14mi MP Finish": 14.0, "W13 Mon 6mi Easy": 6.0, "W13 Tue Hill Tempo": 7.0, "W13 Thu Tempo 7mi": 10.0, "W13 Fri 8mi Easy": 8.0, "W13 Sat 20mi LR": 20.0, "W14 Mon 6mi Easy": 6.0, "W14 Tue 6x1km": 8.2, "W14 Thu Tempo 6mi": 9.0, "W14 Fri 7mi Easy": 7.0, "W14 Sat 18mi MP Finish": 18.0, "W15 Mon 5mi Easy": 5.0, "W15 Tue 4x1200": 7.0, "W15 Thu Tempo 4mi": 7.0, "W15 Fri 5mi Easy": 5.0, "W15 Sat 14mi MP Finish": 14.0, "W16 Mon 4mi Easy": 4.0, "W16 Tue 3x Mile": 7.5, "W16 Thu Tempo 3mi": 6.0, "W16 Fri 4mi Easy": 4.0, "W16 Sat 10mi LR": 10.0, "W17 Mon 4mi Easy": 4.0, "W17 Tue 3x Harlem Hill": 5.4, "W17 Thu Tempo 2mi": 5.0, "W17 Fri 4mi Easy": 4.0, "W17 Sat 8mi LR": 8.0, "W18 Mon 3mi Easy": 3.0, "W18 Tue 4x400": 5.0, "W18 Thu 4mi Strides": 4.0, "W18 Fri 3mi Easy": 3.0, "W18 Sat 5mi Easy": 5.0, "W19 Tue 3mi Strides": 3.0, "W19 Thu 3mi Easy": 3.0, "W19 Sat 2mi Shakeout": 2.0}, "planTargets": {"W1 Mon 4mi Easy": null, "W1 Tue 5mi Strides": {"label": "6:30\u20137:00/mi", "fastSec": 390, "slowSec": 420}, "W1 Thu 4mi Easy": null, "W1 Fri 5mi Easy": null, "W1 Sat 8mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W2 Mon 4mi Easy": null, "W2 Tue 5mi Strides": {"label": "6:30\u20137:00/mi", "fastSec": 390, "slowSec": 420}, "W2 Thu 5mi Easy": null, "W2 Fri 6mi Easy": null, "W2 Sat 9mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W3 Mon 5mi Easy": null, "W3 Tue 8x Cat Hill": {"label": "7:00\u20137:40/mi", "fastSec": 420, "slowSec": 460}, "W3 Thu Tempo 2mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W3 Fri 6mi Easy": null, "W3 Sat 10mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W4 Mon 5mi Easy": null, "W4 Tue 6x800": {"label": "6:35\u20137:10/mi", "fastSec": 395, "slowSec": 430}, "W4 Thu Tempo 3mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W4 Fri 6mi Easy": null, "W4 Sat 11mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W5 Mon 5mi Easy": null, "W5 Tue Mixed Hills": {"label": "9:30\u201310:30/mi", "fastSec": 570, "slowSec": 630}, "W5 Thu Tempo 3mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W5 Fri 6mi Easy": null, "W5 Sat 12mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W6 Mon 4mi Easy": null, "W6 Tue 4x1km": {"label": "6:35\u20137:10/mi", "fastSec": 395, "slowSec": 430}, "W6 Thu Tempo 3mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W6 Fri 4mi Easy": null, "W6 Sat 10mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W7 Mon 5mi Easy": null, "W7 Tue 5x Harlem Hill": {"label": "7:00\u20137:40/mi", "fastSec": 420, "slowSec": 460}, "W7 Thu Tempo 4mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W7 Fri 5mi Easy": null, "W7 Sat 16mi MP Finish": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W8 Mon 5mi Easy": null, "W8 Tue 4x1200": {"label": "6:35\u20137:10/mi", "fastSec": 395, "slowSec": 430}, "W8 Thu Tempo 5mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W8 Fri 5mi Easy": null, "W8 Sat 17mi MP Finish": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W9 Mon 4mi Easy": null, "W9 Tue 6x800": {"label": "6:35\u20137:10/mi", "fastSec": 395, "slowSec": 430}, "W9 Thu Tempo 3mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W9 Fri 4mi Easy": null, "W9 Sat 10mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W10 Mon 6mi Easy": null, "W10 Tue 5x Harlem Hill": {"label": "7:00\u20137:40/mi", "fastSec": 420, "slowSec": 460}, "W10 Thu Tempo 6mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W10 Fri 7mi Easy": null, "W10 Sat 18mi MP Finish": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W11 Mon 5mi Easy": null, "W11 Tue 5x Mile": {"label": "6:35\u20137:10/mi", "fastSec": 395, "slowSec": 430}, "W11 Thu Tempo 6mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W11 Fri 6mi Easy": null, "W11 Sat 20mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W12 Mon 6mi Easy": null, "W12 Tue 8x Cat Hill": {"label": "7:00\u20137:40/mi", "fastSec": 420, "slowSec": 460}, "W12 Thu Tempo 5mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W12 Fri 7mi Easy": null, "W12 Sat 14mi MP Finish": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W13 Mon 6mi Easy": null, "W13 Tue Hill Tempo": {"label": "7:30\u20138:30/mi", "fastSec": 450, "slowSec": 510}, "W13 Thu Tempo 7mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W13 Fri 8mi Easy": null, "W13 Sat 20mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W14 Mon 6mi Easy": null, "W14 Tue 6x1km": {"label": "6:35\u20137:10/mi", "fastSec": 395, "slowSec": 430}, "W14 Thu Tempo 6mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W14 Fri 7mi Easy": null, "W14 Sat 18mi MP Finish": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W15 Mon 5mi Easy": null, "W15 Tue 4x1200": {"label": "6:35\u20137:10/mi", "fastSec": 395, "slowSec": 430}, "W15 Thu Tempo 4mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W15 Fri 5mi Easy": null, "W15 Sat 14mi MP Finish": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W16 Mon 4mi Easy": null, "W16 Tue 3x Mile": {"label": "6:35\u20137:10/mi", "fastSec": 395, "slowSec": 430}, "W16 Thu Tempo 3mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W16 Fri 4mi Easy": null, "W16 Sat 10mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W17 Mon 4mi Easy": null, "W17 Tue 3x Harlem Hill": {"label": "9:30\u201310:30/mi", "fastSec": 570, "slowSec": 630}, "W17 Thu Tempo 2mi": {"label": "7:35\u20137:50/mi", "fastSec": 455, "slowSec": 470}, "W17 Fri 4mi Easy": null, "W17 Sat 8mi LR": {"label": "8:45\u20139:30/mi", "fastSec": 525, "slowSec": 570}, "W18 Mon 3mi Easy": null, "W18 Tue 4x400": {"label": "9:30\u201310:30/mi", "fastSec": 570, "slowSec": 630}, "W18 Thu 4mi Strides": {"label": "6:30\u20137:00/mi", "fastSec": 390, "slowSec": 420}, "W18 Fri 3mi Easy": null, "W18 Sat 5mi Easy": null, "W19 Tue 3mi Strides": {"label": "6:30\u20137:00/mi", "fastSec": 390, "slowSec": 420}, "W19 Thu 3mi Easy": null, "W19 Sat 2mi Shakeout": null}}, "schedule": [{"scheduleId": 1000, "workoutId": 5000, "title": "W1 Mon 4mi Easy", "date": "2026-06-15"}, {"scheduleId": 1001, "workoutId": 5001, "title": "W1 Tue 5mi Strides", "date": "2026-06-16"}, {"scheduleId": 1002, "workoutId": 5002, "title": "W1 Thu 4mi Easy", "date": "2026-06-18"}, {"scheduleId": 1003, "workoutId": 5003, "title": "W1 Fri 5mi Easy", "date": "2026-06-19"}, {"scheduleId": 1004, "workoutId": 5004, "title": "W1 Sat 8mi LR", "date": "2026-06-20"}, {"scheduleId": 1005, "workoutId": 5005, "title": "W2 Mon 4mi Easy", "date": "2026-06-22"}, {"scheduleId": 1006, "workoutId": 5006, "title": "W2 Tue 5mi Strides", "date": "2026-06-23"}, {"scheduleId": 1007, "workoutId": 5007, "title": "W2 Thu 5mi Easy", "date": "2026-06-25"}, {"scheduleId": 1008, "workoutId": 5008, "title": "W2 Fri 6mi Easy", "date": "2026-06-26"}, {"scheduleId": 1009, "workoutId": 5009, "title": "W2 Sat 9mi LR", "date": "2026-06-27"}, {"scheduleId": 1010, "workoutId": 5010, "title": "W3 Mon 5mi Easy", "date": "2026-06-29"}, {"scheduleId": 1011, "workoutId": 5011, "title": "W3 Tue 8x Cat Hill", "date": "2026-06-30"}, {"scheduleId": 1012, "workoutId": 5012, "title": "W3 Thu Tempo 2mi", "date": "2026-07-02"}, {"scheduleId": 1013, "workoutId": 5013, "title": "W3 Fri 6mi Easy", "date": "2026-07-03"}, {"scheduleId": 1014, "workoutId": 5014, "title": "W3 Sat 10mi LR", "date": "2026-07-04"}, {"scheduleId": 1015, "workoutId": 5015, "title": "W4 Mon 5mi Easy", "date": "2026-07-06"}, {"scheduleId": 1016, "workoutId": 5016, "title": "W4 Tue 6x800", "date": "2026-07-07"}, {"scheduleId": 1017, "workoutId": 5017, "title": "W4 Thu Tempo 3mi", "date": "2026-07-09"}, {"scheduleId": 1018, "workoutId": 5018, "title": "W4 Fri 6mi Easy", "date": "2026-07-10"}, {"scheduleId": 1019, "workoutId": 5019, "title": "W4 Sat 11mi LR", "date": "2026-07-11"}, {"scheduleId": 1020, "workoutId": 5020, "title": "W5 Mon 5mi Easy", "date": "2026-07-13"}, {"scheduleId": 1021, "workoutId": 5021, "title": "W5 Tue Mixed Hills", "date": "2026-07-14"}, {"scheduleId": 1022, "workoutId": 5022, "title": "W5 Thu Tempo 3mi", "date": "2026-07-16"}, {"scheduleId": 1023, "workoutId": 5023, "title": "W5 Fri 6mi Easy", "date": "2026-07-17"}, {"scheduleId": 1024, "workoutId": 5024, "title": "W5 Sat 12mi LR", "date": "2026-07-18"}, {"scheduleId": 1025, "workoutId": 5025, "title": "W6 Mon 4mi Easy", "date": "2026-07-20"}, {"scheduleId": 1026, "workoutId": 5026, "title": "W6 Tue 4x1km", "date": "2026-07-21"}, {"scheduleId": 1027, "workoutId": 5027, "title": "W6 Thu Tempo 3mi", "date": "2026-07-23"}, {"scheduleId": 1028, "workoutId": 5028, "title": "W6 Fri 4mi Easy", "date": "2026-07-24"}, {"scheduleId": 1029, "workoutId": 5029, "title": "W6 Sat 10mi LR", "date": "2026-07-25"}, {"scheduleId": 1030, "workoutId": 5030, "title": "W7 Mon 5mi Easy", "date": "2026-07-27"}, {"scheduleId": 1031, "workoutId": 5031, "title": "W7 Tue 5x Harlem Hill", "date": "2026-07-28"}, {"scheduleId": 1032, "workoutId": 5032, "title": "W7 Thu Tempo 4mi", "date": "2026-07-30"}, {"scheduleId": 1033, "workoutId": 5033, "title": "W7 Fri 5mi Easy", "date": "2026-07-31"}, {"scheduleId": 1034, "workoutId": 5034, "title": "W7 Sat 16mi MP Finish", "date": "2026-08-01"}, {"scheduleId": 1035, "workoutId": 5035, "title": "W8 Mon 5mi Easy", "date": "2026-08-03"}, {"scheduleId": 1036, "workoutId": 5036, "title": "W8 Tue 4x1200", "date": "2026-08-04"}, {"scheduleId": 1037, "workoutId": 5037, "title": "W8 Thu Tempo 5mi", "date": "2026-08-06"}, {"scheduleId": 1038, "workoutId": 5038, "title": "W8 Fri 5mi Easy", "date": "2026-08-07"}, {"scheduleId": 1039, "workoutId": 5039, "title": "W8 Sat 17mi MP Finish", "date": "2026-08-08"}, {"scheduleId": 1040, "workoutId": 5040, "title": "W9 Mon 4mi Easy", "date": "2026-08-10"}, {"scheduleId": 1041, "workoutId": 5041, "title": "W9 Tue 6x800", "date": "2026-08-11"}, {"scheduleId": 1042, "workoutId": 5042, "title": "W9 Thu Tempo 3mi", "date": "2026-08-13"}, {"scheduleId": 1043, "workoutId": 5043, "title": "W9 Fri 4mi Easy", "date": "2026-08-14"}, {"scheduleId": 1044, "workoutId": 5044, "title": "W9 Sat 10mi LR", "date": "2026-08-15"}, {"scheduleId": 1045, "workoutId": 5045, "title": "W10 Mon 6mi Easy", "date": "2026-08-17"}, {"scheduleId": 1046, "workoutId": 5046, "title": "W10 Tue 5x Harlem Hill", "date": "2026-08-18"}, {"scheduleId": 1047, "workoutId": 5047, "title": "W10 Thu Tempo 6mi", "date": "2026-08-20"}, {"scheduleId": 1048, "workoutId": 5048, "title": "W10 Fri 7mi Easy", "date": "2026-08-21"}, {"scheduleId": 1049, "workoutId": 5049, "title": "W10 Sat 18mi MP Finish", "date": "2026-08-22"}, {"scheduleId": 1050, "workoutId": 5050, "title": "W11 Mon 5mi Easy", "date": "2026-08-24"}, {"scheduleId": 1051, "workoutId": 5051, "title": "W11 Tue 5x Mile", "date": "2026-08-25"}, {"scheduleId": 1052, "workoutId": 5052, "title": "W11 Thu Tempo 6mi", "date": "2026-08-27"}, {"scheduleId": 1053, "workoutId": 5053, "title": "W11 Fri 6mi Easy", "date": "2026-08-28"}, {"scheduleId": 1054, "workoutId": 5054, "title": "W11 Sat 20mi LR", "date": "2026-08-29"}, {"scheduleId": 1055, "workoutId": 5055, "title": "W12 Mon 6mi Easy", "date": "2026-08-31"}, {"scheduleId": 1056, "workoutId": 5056, "title": "W12 Tue 8x Cat Hill", "date": "2026-09-01"}, {"scheduleId": 1057, "workoutId": 5057, "title": "W12 Thu Tempo 5mi", "date": "2026-09-03"}, {"scheduleId": 1058, "workoutId": 5058, "title": "W12 Fri 7mi Easy", "date": "2026-09-04"}, {"scheduleId": 1059, "workoutId": 5059, "title": "W12 Sat 14mi MP Finish", "date": "2026-09-05"}, {"scheduleId": 1060, "workoutId": 5060, "title": "W13 Mon 6mi Easy", "date": "2026-09-07"}, {"scheduleId": 1061, "workoutId": 5061, "title": "W13 Tue Hill Tempo", "date": "2026-09-08"}, {"scheduleId": 1062, "workoutId": 5062, "title": "W13 Thu Tempo 7mi", "date": "2026-09-10"}, {"scheduleId": 1063, "workoutId": 5063, "title": "W13 Fri 8mi Easy", "date": "2026-09-11"}, {"scheduleId": 1064, "workoutId": 5064, "title": "W13 Sat 20mi LR", "date": "2026-09-12"}, {"scheduleId": 1065, "workoutId": 5065, "title": "W14 Mon 6mi Easy", "date": "2026-09-14"}, {"scheduleId": 1066, "workoutId": 5066, "title": "W14 Tue 6x1km", "date": "2026-09-15"}, {"scheduleId": 1067, "workoutId": 5067, "title": "W14 Thu Tempo 6mi", "date": "2026-09-17"}, {"scheduleId": 1068, "workoutId": 5068, "title": "W14 Fri 7mi Easy", "date": "2026-09-18"}, {"scheduleId": 1069, "workoutId": 5069, "title": "W14 Sat 18mi MP Finish", "date": "2026-09-19"}, {"scheduleId": 1070, "workoutId": 5070, "title": "W15 Mon 5mi Easy", "date": "2026-09-21"}, {"scheduleId": 1071, "workoutId": 5071, "title": "W15 Tue 4x1200", "date": "2026-09-22"}, {"scheduleId": 1072, "workoutId": 5072, "title": "W15 Thu Tempo 4mi", "date": "2026-09-24"}, {"scheduleId": 1073, "workoutId": 5073, "title": "W15 Fri 5mi Easy", "date": "2026-09-25"}, {"scheduleId": 1074, "workoutId": 5074, "title": "W15 Sat 14mi MP Finish", "date": "2026-09-26"}, {"scheduleId": 1075, "workoutId": 5075, "title": "W16 Mon 4mi Easy", "date": "2026-09-28"}, {"scheduleId": 1076, "workoutId": 5076, "title": "W16 Tue 3x Mile", "date": "2026-09-29"}, {"scheduleId": 1077, "workoutId": 5077, "title": "W16 Thu Tempo 3mi", "date": "2026-10-01"}, {"scheduleId": 1078, "workoutId": 5078, "title": "W16 Fri 4mi Easy", "date": "2026-10-02"}, {"scheduleId": 1079, "workoutId": 5079, "title": "W16 Sat 10mi LR", "date": "2026-10-03"}, {"scheduleId": 1080, "workoutId": 5080, "title": "W17 Mon 4mi Easy", "date": "2026-10-05"}, {"scheduleId": 1081, "workoutId": 5081, "title": "W17 Tue 3x Harlem Hill", "date": "2026-10-06"}, {"scheduleId": 1082, "workoutId": 5082, "title": "W17 Thu Tempo 2mi", "date": "2026-10-08"}, {"scheduleId": 1083, "workoutId": 5083, "title": "W17 Fri 4mi Easy", "date": "2026-10-09"}, {"scheduleId": 1084, "workoutId": 5084, "title": "W17 Sat 8mi LR", "date": "2026-10-10"}, {"scheduleId": 1085, "workoutId": 5085, "title": "W18 Mon 3mi Easy", "date": "2026-10-12"}, {"scheduleId": 1086, "workoutId": 5086, "title": "W18 Tue 4x400", "date": "2026-10-13"}, {"scheduleId": 1087, "workoutId": 5087, "title": "W18 Thu 4mi Strides", "date": "2026-10-15"}, {"scheduleId": 1088, "workoutId": 5088, "title": "W18 Fri 3mi Easy", "date": "2026-10-16"}, {"scheduleId": 1089, "workoutId": 5089, "title": "W18 Sat 5mi Easy", "date": "2026-10-17"}, {"scheduleId": 1090, "workoutId": 5090, "title": "W19 Tue 3mi Strides", "date": "2026-10-20"}, {"scheduleId": 1091, "workoutId": 5091, "title": "W19 Thu 3mi Easy", "date": "2026-10-22"}, {"scheduleId": 1092, "workoutId": 5092, "title": "W19 Sat 2mi Shakeout", "date": "2026-10-24"}]}, "actuals": {"weekly": {"1": 26.4, "2": 28.9, "3": 26.4, "4": 36.1, "5": 35.4, "6": 11.0}, "runs": [{"activityId": "2026-06-15", "date": "2026-06-15", "mi": 4.1, "paceSec": 585, "pace": "9:45", "name": "W1 Mon 4mi Easy"}, {"activityId": "2026-06-16", "date": "2026-06-16", "mi": 5.17, "paceSec": 400, "pace": "6:40", "name": "W1 Tue 5mi Strides"}, {"activityId": "2026-06-18", "date": "2026-06-18", "mi": 3.9, "paceSec": 588, "pace": "9:48", "name": "W1 Thu 4mi Easy"}, {"activityId": "2026-06-19", "date": "2026-06-19", "mi": 5.14, "paceSec": 613, "pace": "10:13", "name": "W1 Fri 5mi Easy"}, {"activityId": "2026-06-20", "date": "2026-06-20", "mi": 8.12, "paceSec": 548, "pace": "9:08", "name": "W1 Sat 8mi LR"}, {"activityId": "2026-06-22", "date": "2026-06-22", "mi": 3.85, "paceSec": 587, "pace": "9:47", "name": "W2 Mon 4mi Easy"}, {"activityId": "2026-06-23", "date": "2026-06-23", "mi": 4.91, "paceSec": 405, "pace": "6:45", "name": "W2 Tue 5mi Strides"}, {"activityId": "2026-06-25", "date": "2026-06-25", "mi": 4.81, "paceSec": 591, "pace": "9:51", "name": "W2 Thu 5mi Easy"}, {"activityId": "2026-06-26", "date": "2026-06-26", "mi": 6.19, "paceSec": 607, "pace": "10:07", "name": "W2 Fri 6mi Easy"}, {"activityId": "2026-06-27", "date": "2026-06-27", "mi": 9.13, "paceSec": 543, "pace": "9:03", "name": "W2 Sat 9mi LR"}, {"activityId": "2026-06-29", "date": "2026-06-29", "mi": 5.09, "paceSec": 610, "pace": "10:10", "name": "W3 Mon 5mi Easy"}, {"activityId": "2026-06-30", "date": "2026-06-30", "mi": 6.49, "paceSec": 444, "pace": "7:24", "name": "W3 Tue 8x Cat Hill"}, {"activityId": "2026-07-02", "date": "2026-07-02", "mi": 4.88, "paceSec": 461, "pace": "7:41", "name": "W3 Thu Tempo 2mi"}, {"activityId": "2026-07-04", "date": "2026-07-04", "mi": 9.88, "paceSec": 542, "pace": "9:02", "name": "W3 Sat 10mi LR"}, {"activityId": "2026-07-06", "date": "2026-07-06", "mi": 5.18, "paceSec": 588, "pace": "9:48", "name": "W4 Mon 5mi Easy"}, {"activityId": "2026-07-07", "date": "2026-07-07", "mi": 7.27, "paceSec": 406, "pace": "6:46", "name": "W4 Tue 6x800"}, {"activityId": "2026-07-09", "date": "2026-07-09", "mi": 6.27, "paceSec": 464, "pace": "7:44", "name": "W4 Thu Tempo 3mi"}, {"activityId": "2026-07-10", "date": "2026-07-10", "mi": 6.24, "paceSec": 608, "pace": "10:08", "name": "W4 Fri 6mi Easy"}, {"activityId": "2026-07-11", "date": "2026-07-11", "mi": 11.07, "paceSec": 541, "pace": "9:01", "name": "W4 Sat 11mi LR"}, {"activityId": "2026-07-13", "date": "2026-07-13", "mi": 5.26, "paceSec": 587, "pace": "9:47", "name": "W5 Mon 5mi Easy"}, {"activityId": "2026-07-14", "date": "2026-07-14", "mi": 6.29, "paceSec": 605, "pace": "10:05", "name": "W5 Tue Mixed Hills"}, {"activityId": "2026-07-16", "date": "2026-07-16", "mi": 6.13, "paceSec": 498, "pace": "8:18", "name": "W5 Thu Tempo 3mi"}, {"activityId": "2026-07-17", "date": "2026-07-17", "mi": 6.11, "paceSec": 607, "pace": "10:07", "name": "W5 Fri 6mi Easy"}, {"activityId": "2026-07-18", "date": "2026-07-18", "mi": 11.6, "paceSec": 550, "pace": "9:10", "name": "W5 Sat 12mi LR"}, {"activityId": "2026-07-20", "date": "2026-07-20", "mi": 4.15, "paceSec": 587, "pace": "9:47", "name": "W6 Mon 4mi Easy"}, {"activityId": "2026-07-21", "date": "2026-07-21", "mi": 6.8, "paceSec": 418, "pace": "6:58", "name": "W6 Tue 4x1km"}], "ann": {"2026-06-20": {"rpe": 3, "note": "Felt smooth, negative split", "shoes": "Pegasus 41"}}}, "wellness": {"days": [{"date": "2026-07-23", "rhr": 49, "sleepH": 5.7, "bb": 52}, {"date": "2026-07-22", "rhr": 48, "sleepH": 7.1, "bb": 90}, {"date": "2026-07-21", "rhr": 47, "sleepH": 7.0, "bb": 81}, {"date": "2026-07-20", "rhr": 46, "sleepH": 7.5, "bb": 92}, {"date": "2026-07-19", "rhr": 45, "sleepH": 7.5, "bb": 75}, {"date": "2026-07-18", "rhr": 46, "sleepH": 7.0, "bb": 82}, {"date": "2026-07-17", "rhr": 47, "sleepH": 7.9, "bb": 90}]}};
+(function(){
+ const D=DEMO;
+ function mulberry(seed){return function(){seed|=0;seed=(seed+0x6D2B79F5)|0;
+  let t=Math.imul(seed^(seed>>>15),1|seed);t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296;};}
+ window.demoRun=function(aid){
+  const r=D.actuals.runs.find(x=>x.activityId===aid);
+  if(!r)return {error:'not found'};
+  const it=D.data.schedule.find(i=>i.date===r.date);
+  const title=it?it.title:'';
+  const target=title?D.data.plan.planTargets[title]:null;
+  const rnd=mulberry(r.date.split('-').join('')*1);
+  // laps: workout structure for interval days, mile splits otherwise
+  const laps=[];
+  const rep=title.match(/(\d+)x ?(\d+|Mile|Cat|Harlem)/);
+  if(target&&rep){
+   const n=Math.min(10,parseInt(rep[1],10));
+   const raw=parseInt(rep[2],10);
+   const repMi=rep[2]==='Mile'?1:(raw>30?raw/1609.34:(rep[2]==='Harlem'?0.4:0.2));
+   laps.push({mi:1.5,paceSec:600+Math.round(rnd()*30)});
+   for(let i=0;i<n;i++){
+    laps.push({mi:repMi,paceSec:Math.round((target.fastSec+target.slowSec)/2+(rnd()-0.5)*16)});
+    laps.push({mi:0.25,paceSec:660+Math.round(rnd()*40)});
+   }
+   laps.push({mi:1.5,paceSec:610+Math.round(rnd()*25)});
+  }else{
+   const n=Math.max(1,Math.round(r.mi));
+   for(let i=0;i<n;i++){
+    let p=r.paceSec+(rnd()-0.5)*20;
+    if(target&&i===0)p=r.paceSec+55;          // warmup mile
+    if(target&&i===n-1)p=r.paceSec-12;        // strong finish
+    laps.push({mi:i===n-1?(r.mi-(n-1))||1:1,paceSec:Math.round(p)});
+   }
+  }
+  // series + abstract riverside route
+  const N=150,d=[],pc=[],hr=[],el=[],rt=[];
+  let cum=0;const tot=laps.reduce((a,l)=>a+l.mi,0);
+  for(let i=0;i<N;i++){
+   const x=i/(N-1)*tot;d.push(Math.round(x*1000)/1000);
+   let acc=0,lp=laps[laps.length-1];
+   for(const l of laps){acc+=l.mi;if(x<=acc){lp=l;break;}}
+   pc.push(Math.round(lp.paceSec+Math.sin(i*1.7)*9+(rnd()-0.5)*8));
+   hr.push(Math.round(Math.min(184,128+x/tot*22+ (620-lp.paceSec)*0.12+Math.sin(i*0.9)*3)));
+   const t=i/(N-1);
+   el.push(Math.round(12+9*Math.sin(i*0.22)+t*14));
+   rt.push([40.72+t*0.028+Math.sin(t*9)*0.0012,
+            -74.012+Math.sin(t*3.1)*0.004+Math.cos(t*13)*0.0009]);
+  }
+  return {summary:{name:title?title+' — demo run':'Demo run',mi:r.mi,
+    durSec:Math.round(r.mi*r.paceSec),paceSec:r.paceSec,
+    avgHr:Math.round(hr.reduce((a,b)=>a+b,0)/hr.length),
+    maxHr:Math.max.apply(null,hr),cad:157,elevFt:48},
+   laps:laps,series:{d:d,pace:pc,hr:hr,elev:el},route:rt};
+ };
+ window.fetch=async function(u,opts){
+  let resp;u=String(u);
+  if(u.startsWith('/api/move')){const b=JSON.parse(opts.body);
+   const it=D.data.schedule.find(i=>String(i.scheduleId)===String(b.scheduleId));
+   if(it)it.date=b.date;resp={ok:true};}
+  else if(u.startsWith('/api/trends')){
+   const rhr=[],easy=[];
+   for(let i=0;i<28;i++)rhr.push({d:'d'+i,v:Math.round(52-i*0.12+Math.sin(i*0.8)*1.6)});
+   for(let w=1;w<=5;w++)easy.push({w:w,v:Math.round(600-w*7)});
+   resp={rhr:rhr,easy:easy};}
+  else if(u.startsWith('/api/review')){resp={review:{week:5,mi:34.8,planned:36,runs:5,
+   plannedRuns:5,onTarget:3,judged:3,vdot:49.1,
+   line:'textbook week — the recovery is earned'}};}
+  else if(u.startsWith('/api/coach/apply')){resp={ok:true};}
+  else if(u.startsWith('/api/coach')){resp={proposals:[]};}
+  else if(u.startsWith('/api/run/')&&u.endsWith('/gear')){const b=JSON.parse(opts.body);
+   const aid=u.split('/')[3];D.actuals.ann=D.actuals.ann||{};
+   D.actuals.ann[aid]=Object.assign(D.actuals.ann[aid]||{},{shoes:b.gearId});resp={ok:true};}
+  else if(u.startsWith('/api/gear')&&opts&&opts.method!=='GET'&&opts.body){resp={ok:true};}
+  else if(u.startsWith('/api/gear')){resp={gear:[
+   {key:'asics gel nimbus 27',nickname:'Nimbus 27',display:'Nimbus 27',brand:'Asics',model:'Gel Nimbus 27',
+    mi:318,runs:21,last:'2026-07-22',threshold:400,retired:false,isDefault:true},
+   {key:'asics superblast',nickname:'Superblast',display:'Superblast',brand:'Asics',model:'Superblast',
+    mi:64,runs:4,last:'2026-07-19',threshold:400,retired:false,isDefault:false}]};}
+  else if(u.startsWith('/api/annotate')){const b=JSON.parse(opts.body);
+   D.actuals.ann=D.actuals.ann||{};
+   D.actuals.ann[String(b.activityId)]={rpe:b.rpe,note:b.note,shoes:b.shoes};resp={ok:true};}
+  else if(u.startsWith('/api/unschedule')){const b=JSON.parse(opts.body);
+   const i=D.data.schedule.findIndex(x=>String(x.scheduleId)===String(b.scheduleId));
+   if(i>=0)D.data.schedule.splice(i,1);resp={ok:true};}
+  else if(u.startsWith('/api/shift_range')){const b=JSON.parse(opts.body);let n=0;
+   D.data.schedule.forEach(i=>{if(i.date>=b.from&&i.date<=b.to){
+    const d=new Date(i.date+'T12:00:00');d.setDate(d.getDate()+b.days);
+    i.date=d.toISOString().slice(0,10);n++;}});resp={ok:true,moved:n};}
+  else if(u.startsWith('/api/run/'))resp=demoRun(decodeURIComponent(u.split('/api/run/')[1]));
+  else if(u.startsWith('/api/fitness')){
+   let best=0;
+   D.actuals.runs.forEach(r=>{
+    if(!r.paceSec||r.mi<3)return;
+    const t=r.mi*r.paceSec/60,v=r.mi*1609.34/t;
+    const vo2=-4.6+0.182258*v+0.000104*v*v;
+    const pct=0.8+0.1894393*Math.exp(-0.012778*t)+0.2989558*Math.exp(-0.1932605*t);
+    best=Math.max(best,vo2/pct);
+   });
+   let lo=3600,hi=25200;
+   for(let i=0;i<60;i++){const mid=(lo+hi)/2,t=mid/60,v=42195/t;
+    const vo2=-4.6+0.182258*v+0.000104*v*v;
+    const pct=0.8+0.1894393*Math.exp(-0.012778*t)+0.2989558*Math.exp(-0.1932605*t);
+    if(vo2/pct>best)lo=mid;else hi=mid;}
+   const ms=Math.round((lo+hi)/2);
+   const hh=Math.floor(ms/3600),rem=ms-hh*3600,mm=Math.floor(rem/60),ss=rem-mm*60;
+   resp={current:Math.round(best*10)/10,weeks:[],
+    marathon:hh+':'+String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0'),
+    goalGap:ms-12300};}
+  else if(u.startsWith('/api/data'))resp=D.data;
+  else if(u.startsWith('/api/actuals'))resp=D.actuals;
+  else if(u.startsWith('/api/wellness'))resp=D.wellness;
+  else if(u.startsWith('/api/weather'))resp={tempF:84,feelsF:88,humidity:72,heatPct:0.05};
+  else resp={error:'not found'};
+  return {json:async()=>resp};
+ };
+ addEventListener('DOMContentLoaded',function(){
+  const b=document.createElement('a');
+  b.textContent='DEMO \u00b7 sample data';
+  b.title='Interactive demo with a synthetic athlete. No real accounts, no backend.';
+  b.style.cssText='position:fixed;top:10px;right:10px;background:#5aa2ff;color:#fff;'+
+   'font:600 11px -apple-system,sans-serif;padding:5px 11px;border-radius:999px;'+
+   'z-index:99;letter-spacing:.5px;text-decoration:none';
+  document.body.appendChild(b);
+ });
+})();</script>
+<script>
+function escapeHTML(s){
+ return String(s==null?'':s).replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function shoeName(key){
+ const g=(S.gear||[]).find(x=>x.key===key);
+ return g?(g.nickname||g.display):key;
+}
+const IS_MOBILE=matchMedia('(max-width:700px)').matches;
+let S={schedule:[],plan:null,runs:[],weeklyActual:{},wellness:null,month:null,
+ undo:null,moveItem:null,selDate:null,
+ planMode:(function(){try{return localStorage.getItem('coachPlanMode')||(IS_MOBILE?'list':'month');}
+  catch(e){return 'month';}})()};
+function setPlanMode(m){S.planMode=m;try{localStorage.setItem('coachPlanMode',m);}catch(e){}render();}
+const DAY=864e5;
+const fmt=d=>d.toISOString().slice(0,10);
+const parse=s=>new Date(s+'T12:00:00');
+const fmtPace=s=>s?Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):'—';
+
+function kind(t){
+ if(/MP Finish|mi LR/.test(t))return'c-long';
+ if(/Strides/.test(t))return'c-strides';
+ if(/Tempo|Hill/.test(t))return'c-tempo';
+ if(/\dx/.test(t))return'c-hard';
+ return'c-easy';
+}
+const isHard=t=>/Tempo|Hill|\dx|MP Finish/.test(t);
+const kindVar={'c-easy':'easy','c-strides':'strides','c-tempo':'tempo','c-hard':'hard','c-long':'long'};
+
+function toast(msg,opts){
+ opts=opts||{};
+ const t=document.getElementById('toast');
+ t.className=opts.err?'err':'';
+ t.innerHTML=msg+(opts.undo?' <button class="ghost" onclick="doUndo()">Undo</button>':'')+
+   (opts.cancel?' <button class="ghost" onclick="exitMoveMode()">Cancel</button>':'');
+ t.style.display='flex';
+ clearTimeout(t._h);
+ if(!opts.sticky)t._h=setTimeout(()=>t.style.display='none',opts.undo?6000:3000);
+}
+function hideToast(){document.getElementById('toast').style.display='none';}
+const KEY=new URLSearchParams(location.search).get('key')||'';
+async function jget(u){const r=await fetch(u,{headers:{'X-Key':KEY}});const j=await r.json();
+ if(j.error)throw new Error(j.error);return j;}
+async function jpost(u,b){const r=await fetch(u,{method:'POST',headers:{'X-Key':KEY},body:JSON.stringify(b)});
+ const j=await r.json();if(j.error)throw new Error(j.error);return j;}
+
+async function load(force){
+ try{
+  const d=await jget('/api/data'+(force?'?refresh=1':''));
+  S.plan=d.plan;S.schedule=d.schedule;
+  if(S.month===null){
+   const t=parse(S.plan.today),lo=parse(S.plan.start),hi=parse(S.plan.race);
+   const c=t<lo?lo:(t>hi?hi:t);S.month=c.getFullYear()*12+c.getMonth();
+  }
+  render();
+  jget('/api/actuals').then(j=>{S.runs=j.runs||[];S.weeklyActual=j.weekly||{};
+   S.ann=j.ann||{};if(j.stale)toast('Garmin unreachable — showing locally saved data',{err:1});
+   render();}).catch(()=>{});
+  jget('/api/wellness').then(j=>{S.wellness=j;render();}).catch(()=>{});
+  jget('/api/weather').then(j=>{S.weather=j;render();}).catch(()=>{});
+  jget('/api/fitness').then(j=>{S.fit=j;render();}).catch(()=>{});
+  jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{});
+  jget('/api/trends').then(j=>{S.trends=j;render();}).catch(()=>{});
+  jget('/api/review').then(j=>{S.review=j.review;render();}).catch(()=>{});
+  jget('/api/coach').then(j=>{S.props=(j.proposals||[]);render();}).catch(()=>{});
+ }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
+}
+function nav(d){S.month+=d;render();}
+
+function setView(v){
+ S.view=v;
+ const m={today:'v-today',plan:'v-plan',acts:'v-acts'};
+ Object.keys(m).forEach(k=>document.getElementById(m[k]).style.display=k===v?'':'none');
+ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.v===v));
+ try{localStorage.setItem('coachView',v);}catch(e){}
+ window.scrollTo(0,0);
+}
+
+/* ---------------- readiness ---------------- */
+function readiness(){
+ const w=S.wellness;
+ if(!w||!w.days||!w.days.length)return null;
+ const today=w.days[0],hist=w.days.slice(1).filter(d=>d.rhr);
+ const base=hist.length?Math.round(hist.reduce((a,d)=>a+d.rhr,0)/hist.length):null;
+ const flags=[];
+ if(today.rhr&&base&&today.rhr-base>=5)flags.push('resting HR +'+(today.rhr-base)+' over your baseline');
+ if(today.sleepH!==null&&today.sleepH>0&&today.sleepH<6)flags.push('only '+today.sleepH+'h sleep');
+ if(today.bb!==null&&today.bb!==undefined&&today.bb<30)flags.push('Body Battery at '+today.bb);
+ return {today:today,base:base,flags:flags,level:flags.length>=2?'red':(flags.length?'amber':'ok')};
+}
+
+function render(){
+ if(!S.plan)return;
+ const today=S.plan.today;
+ document.getElementById('cdays').textContent=
+   Math.max(0,Math.round((parse(S.plan.race)-parse(today))/DAY));
+ document.getElementById('nsched').textContent=S.schedule.length;
+ const wk=Math.floor((parse(today)-parse(S.plan.start))/DAY/7)+1;
+ // miles this week = actual runs since Monday, independent of plan weeks
+ const mon=new Date(parse(today));mon.setDate(mon.getDate()-((mon.getDay()+6)%7));
+ const ranWk=S.runs.filter(r=>r.date>=fmt(mon)&&r.date<=today).reduce((a,r)=>a+r.mi,0);
+ const planWk=S.plan.plannedWeekly[wk];
+ document.getElementById('wkmi').textContent=
+   Math.round(ranWk)+(planWk?' / '+Math.round(planWk):'');
+ renderStrip(today);
+ renderReview();
+ renderCoach();
+ renderBrief(today);
+ renderTrends();
+ renderPlanTab(today);
+ renderWeek(today);
+ renderChart();
+ renderRamp(wk);
+ renderActs();
+}
+
+function renderPlanTab(today){
+ const list=S.planMode==='list';
+ document.getElementById('segList').className=list?'on':'';
+ document.getElementById('segMonth').className=list?'':'on';
+ document.getElementById('mnav').style.display=list?'none':'';
+ document.getElementById('calwrap').style.display=list?'none':'';
+ document.getElementById('planlist').style.display=list?'':'none';
+ if(list)renderPlanList(today);else renderGrid(today);
+}
+
+function renderPlanList(today){
+ const el=document.getElementById('planlist');
+ const items=S.schedule.slice().sort((a,b)=>a.date.localeCompare(b.date));
+ const ranByDate={};
+ S.runs.forEach(r=>ranByDate[r.date]=(ranByDate[r.date]||0)+r.mi);
+ let h='',lastWk=null;
+ items.forEach(it=>{
+  const wk=Math.floor((parse(it.date)-parse(S.plan.start))/DAY/7)+1;
+  if(wk!==lastWk){
+   h+='<div style="color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin:16px 0 4px">'+
+    'Week '+wk+' · '+(S.plan.plannedWeekly[wk]||'?')+' mi</div>';
+   lastWk=wk;
+  }
+  const past=it.date<today, isT=it.date===today, ran=ranByDate[it.date];
+  let status;
+  if(ran)status='<span style="color:var(--good);font-weight:700">✓ '+ran.toFixed(1)+'</span>';
+  else if(isT)status='<span style="color:var(--accent);font-weight:700">today</span>';
+  else if(past)status='<span style="color:var(--hard)">missed</span>';
+  else status='<span style="color:var(--faint)">›</span>';
+  h+='<div onclick="openDetail('+it.scheduleId+')" style="display:flex;gap:11px;align-items:center;'+
+   'padding:10px 2px;border-top:1px solid var(--line);cursor:pointer'+(past?';opacity:.55':'')+'">'+
+   '<span style="width:64px;flex:none;color:'+(isT?'var(--accent)':'var(--dim)')+';font-size:12.5px;font-weight:600">'+
+    parse(it.date).toLocaleDateString(undefined,{weekday:'short',day:'numeric'})+'</span>'+
+   '<span style="width:9px;height:9px;border-radius:5px;flex:none;background:var(--'+kindVar[kind(it.title)]+')"></span>'+
+   '<b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+    it.title.replace(/^W\d+ \w+ /,'')+'</b>'+
+   '<span style="color:var(--dim);font-size:12.5px">'+(S.plan.planMiles[it.title]||'?')+' mi</span>'+
+   status+'</div>';
+ });
+ el.innerHTML=h||'<p style="color:var(--dim)">No scheduled workouts — run upload first.</p>';
+}
+
+function setActFilter(f){S.actFilter=f;render();}
+function runKind(r){
+ const it=S.schedule.find(i=>i.date===r.date);
+ if(!it)return 'Easy';
+ if(/mi LR|MP Finish/.test(it.title))return 'Long';
+ return isHard(it.title)?'Quality':'Easy';
+}
+function renderActs(){
+ const el=document.getElementById('actpanel');
+ let runs=S.runs.slice().sort((a,b)=>b.date.localeCompare(a.date));
+ if(!runs.length){
+  el.innerHTML='<h3>Activities</h3><p style="color:var(--dim)">Completed runs land here automatically once training starts — tap any for the full breakdown.</p>';
+  return;
+ }
+ const tot=runs.reduce((a,r)=>a+r.mi,0);
+ let h='<h3>Activities <span style="color:var(--dim);font-weight:400">— '+
+   runs.length+' runs · '+tot.toFixed(0)+' mi</span></h3>';
+ // insight chips: 30-day volume, on-target rate, average RPE
+ const cutoff=fmt(new Date(parse(S.plan.today).getTime()-30*DAY));
+ const r30=runs.filter(r=>r.date>=cutoff);
+ let hit=0,judged=0;
+ r30.forEach(r=>{const it=S.schedule.find(i=>i.date===r.date);
+  if(!it)return;const a=assess(it);if(!a)return;
+  judged++;if(a.distOk&&a.paceOk!==false)hit++;});
+ const rpes=Object.values(S.ann||{}).map(a=>a.rpe).filter(Boolean);
+ h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin:4px 0 10px">'+
+  '<div style="background:var(--cell);border-radius:10px;padding:8px 10px;text-align:center"><b style="font-size:17px">'+
+   r30.reduce((a,r)=>a+r.mi,0).toFixed(0)+'</b><div style="color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">mi · 30d</div></div>'+
+  '<div style="background:var(--cell);border-radius:10px;padding:8px 10px;text-align:center"><b style="font-size:17px">'+
+   (judged?Math.round(hit/judged*100)+'%':'—')+'</b><div style="color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">on target</div></div>'+
+  '<div style="background:var(--cell);border-radius:10px;padding:8px 10px;text-align:center"><b style="font-size:17px">'+
+   (rpes.length?(rpes.reduce((a,b)=>a+b,0)/rpes.length).toFixed(1):'—')+'</b><div style="color:var(--dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.5px">avg RPE</div></div></div>';
+ // gear
+ const activeGear=(S.gear||[]).filter(g=>!g.retired);
+ if(activeGear.length){
+  h+='<h3 style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:.7px;margin:14px 0 6px">Gear</h3>';
+  activeGear.forEach(g=>{
+   const pct=Math.min(100,g.mi/(g.threshold+100)*100);
+   const col=g.mi>=g.threshold+50?'var(--hard)':(g.mi>=g.threshold-50?'var(--tempo)':'var(--good)');
+   h+='<div onclick="gearEdit(\''+g.key.replace(/'/g,'')+'\')" style="padding:6px 0;cursor:pointer">'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px"><b>'+
+    escapeHTML(g.nickname||g.display)+(g.isDefault?' <span style="color:var(--faint);font-weight:400">· default</span>':'')+'</b>'+
+    '<span style="color:'+col+'">'+g.mi.toFixed(0)+' mi'+(g.mi>=g.threshold?' · time to retire?':'')+'</span></div>'+
+    '<div style="background:var(--cell);height:5px;border-radius:3px;margin-top:4px">'+
+    '<div style="width:'+pct.toFixed(0)+'%;height:5px;border-radius:3px;background:'+col+'"></div></div></div>';
+  });
+ }
+ // filters
+ h+='<div style="display:flex;gap:6px;margin:12px 0 2px">'+
+  ['All','Quality','Easy','Long'].map(f=>'<button onclick="setActFilter(\''+f+'\')" '+
+   ((S.actFilter||'All')===f?'class="primary" ':'')+'style="padding:5px 13px;font-size:12px">'+f+'</button>').join('')+'</div>';
+ const flt=S.actFilter||'All';
+ if(flt!=='All')runs=runs.filter(r=>runKind(r)===flt);
+ if(S.fit&&S.fit.current){
+  const gap=S.fit.goalGap,onTrack=gap<=0;
+  h+='<div style="background:var(--cell);border-radius:12px;padding:11px 14px;margin:4px 0 10px">'+
+   '<b>Fitness check:</b> VDOT '+S.fit.current+' → projects a <b style="color:'+
+   (onTrack?'var(--good)':'var(--tempo)')+'">'+S.fit.marathon+'</b> marathon '+
+   (onTrack?'— ahead of sub-3:25':'— '+Math.round(Math.abs(gap)/60)+' min off sub-3:25 (training-run floor; races read faster)')+
+   '<div style="color:var(--faint);font-size:11.5px;margin-top:3px">Estimated from your training runs via Daniels VDOT — the trend matters more than the number.</div></div>';
+ }
+ let lastWk=null;
+ runs.forEach(r=>{
+  const wk=Math.floor((parse(r.date)-parse(S.plan.start))/DAY/7)+1;
+  if(wk!==lastWk){
+   h+='<div style="color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.7px;margin:14px 0 2px">'+
+    (wk<1?'Tune-up':'Week '+wk+
+    (S.weeklyActual[wk]?' · '+S.weeklyActual[wk]+' of '+(S.plan.plannedWeekly[wk]||'?')+' mi':''))+'</div>';
+   lastWk=wk;
+  }
+  const it=S.schedule.find(i=>i.date===r.date);
+  const title=escapeHTML((it?it.title:r.name).replace(/^W\d+ \w+ /,''));
+  const a=it?assess(it):null;
+  const col=a?(a.distOk&&a.paceOk!==false?'var(--good)':'var(--tempo)'):'var(--dim)';
+  h+='<div onclick="openRun(\''+r.activityId+'\',\''+(it?it.title:'')+'\')"'+
+   ' style="display:flex;gap:11px;align-items:center;padding:10px 0;border-top:1px solid var(--line);cursor:pointer">'+
+   '<div style="width:9px;height:9px;border-radius:5px;flex:none;background:var(--'+
+     (it?kindVar[kind(it.title)]:'easy')+')"></div>'+
+   '<div style="flex:1;min-width:0"><b>'+title+'</b>'+
+   '<div style="color:var(--dim);font-size:12px">'+
+     parse(r.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'</div></div>'+
+   '<div style="text-align:right"><b>'+r.mi.toFixed(1)+' mi</b>'+
+   '<div style="color:'+col+';font-size:12px">'+(r.pace?r.pace+'/mi':'')+
+     (a&&a.paceMsg?' · '+a.paceMsg:'')+'</div></div>'+
+   (((S.ann||{})[String(r.activityId)]||{}).rpe?
+    '<span style="background:var(--cell);border:1px solid var(--line);border-radius:999px;'+
+    'padding:3px 8px;font-size:11px;color:var(--dim)">RPE '+S.ann[String(r.activityId)].rpe+'</span>':'')+
+   '<span style="color:var(--faint)">›</span></div>';
+ });
+ el.innerHTML=h;
+}
+
+function renderStrip(today){
+ const t=parse(today);
+ const mon=new Date(t);mon.setDate(t.getDate()-((t.getDay()+6)%7));
+ let h='';
+ for(let i=0;i<7;i++){
+  const d=new Date(mon.getTime()+i*DAY),ds=fmt(d);
+  const its=S.schedule.filter(x=>x.date===ds);
+  const ran=runsOn(ds).length>0;
+  h+='<div class="wd'+(ds===today?' today':'')+(ds===S.selDate?' sel':'')+'" onclick="stripTap(\''+ds+'\')">'+
+   '<div class="l">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]+'</div>'+
+   '<span class="n">'+d.getDate()+'</span>'+
+   '<div class="dots">'+(ran?'<span class="ck">✓</span>':
+    its.slice(0,3).map(x=>'<i style="background:var(--'+kindVar[kind(x.title)]+')"></i>').join(''))+
+   '</div></div>';
+ }
+ document.getElementById('wstrip').innerHTML=h;
+}
+function stripTap(ds){
+ S.selDate=(S.selDate===ds)?null:ds;   // tap again to return to today
+ render();
+}
+function renderCoach(){
+ const el=document.getElementById('coachcard');
+ if(!el)return;
+ const p=(S.props||[])[0];
+ if(!p||S.propsDismissed){el.style.display='none';return;}
+ const to=p.to?parse(p.to).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'}):null;
+ el.innerHTML='<div class="top"><div style="flex:1;min-width:0">'+
+  '<b>Coach suggestion</b>'+
+  '<div class="sub">'+escapeHTML(p.reason)+'</div>'+
+  '<div class="sub">'+escapeHTML(p.title.replace(/^W\d+ \w+ /,''))+' ('+p.date+') → '+
+  (p.action==='move'?'<b>'+to+'</b>':'<b>skip it</b>')+'</div></div></div>'+
+  '<div class="cta"><button onclick="S.propsDismissed=1;render()">Later</button>'+
+  '<button class="primary" onclick="applyCoach()">Apply</button></div>';
+ el.style.display='block';
+}
+async function applyCoach(){
+ const p=(S.props||[])[0];
+ if(!p)return;
+ try{
+  await jpost('/api/coach/apply',{action:p.action,scheduleId:p.scheduleId,
+   workoutId:p.workoutId,to:p.to});
+  toast(p.action==='move'?'Rescheduled — sync your watch':'Absorbed. Eyes forward.');
+  S.props=[];load(true);
+ }catch(e){toast('Apply failed: '+e.message,{err:1});}
+}
+
+function renderReview(){
+ const el=document.getElementById('reviewcard'),r=S.review;
+ if(!r){el.style.display='none';return;}
+ el.innerHTML='<div class="top"><div style="flex:1;min-width:0">'+
+  '<b>Week '+r.week+' in review</b>'+
+  '<div class="sub">'+r.mi.toFixed(1)+' of '+Math.round(r.planned||0)+' mi · '+
+  r.runs+'/'+r.plannedRuns+' runs'+(r.judged?' · on target '+r.onTarget+' of '+r.judged:'')+
+  (r.vdot?' · VDOT '+r.vdot:'')+'</div>'+
+  '<div class="sub" style="color:var(--accent)">'+r.line+'</div></div></div>';
+ el.style.display='block';
+}
+
+function sparkSvg(vals,color,goodDown){
+ if(!vals||vals.length<3)return'';
+ const v0=Math.min(...vals),v1=Math.max(...vals),sp=(v1-v0)||1,W=300,H=30;
+ const pts=vals.map((v,i)=>((i/(vals.length-1))*W).toFixed(1)+','+
+   (H-3-((v-v0)/sp)*(H-6)).toFixed(1)).join(' ');
+ return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:30px">'+
+  '<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="2"/></svg>';
+}
+function renderTrends(){
+ const el=document.getElementById('trendpanel'),t=S.trends;
+ if(!t||((t.rhr||[]).length<5&&(t.easy||[]).length<2)){if(el)el.style.display='none';return;}
+ let h='<h3>Trends</h3>';
+ if((t.rhr||[]).length>=5){
+  const vs=t.rhr.map(x=>x.v),last=vs[vs.length-1],first=vs[0],d=last-first;
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px">'+
+   '<span style="color:var(--dim);font-size:13px">Resting HR · 30d</span>'+
+   '<span><b>'+last+'</b> <span style="font-size:11.5px;color:'+(d<=0?'var(--good)':'var(--tempo)')+'">'+
+   (d>0?'▲':'▼')+Math.abs(d)+'</span></span></div>'+sparkSvg(vs,'#3ec6c0');
+ }
+ if((t.easy||[]).length>=2){
+  const vs=t.easy.map(x=>x.v),last=vs[vs.length-1],d=last-vs[0];
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px">'+
+   '<span style="color:var(--dim);font-size:13px">Easy pace · weekly median</span>'+
+   '<span><b>'+fmtPace(last)+'</b> <span style="font-size:11.5px;color:'+(d<=0?'var(--good)':'var(--tempo)')+'">'+
+   (d>0?'▲':'▼')+fmtPace(Math.abs(d))+'</span></span></div>'+sparkSvg(vs,'#5DCAA5');
+ }
+ h+='<div style="color:var(--faint);font-size:11px;margin-top:6px">RHR down = adapting · easy pace down at the same effort = fitness</div>';
+ el.innerHTML=h;el.style.display='block';
+}
+
+function estRange(title){
+ const mi=S.plan.planMiles[title];if(!mi)return'';
+ const t=S.plan.planTargets[title];
+ const lo=Math.round(mi*(t?t.fastSec:585)/60),hi=Math.round(mi*(t?t.slowSec:630)/60);
+ return lo+'–'+hi+'m';
+}
+function renderBrief(today){
+ const br=document.getElementById('brief'),bn=document.getElementById('banner');
+ const r=readiness();
+ bn.className='banner';bn.textContent='';
+ // Focused item: the selected strip day, else today's workout, else next upcoming.
+ let item,fdate;
+ if(S.selDate){
+  fdate=S.selDate;
+  item=S.schedule.filter(i=>i.date===fdate)[0]||null;
+ }else{
+  item=S.schedule.filter(i=>i.date>=today).sort((a,b)=>a.date.localeCompare(b.date))[0]||null;
+  fdate=item?item.date:today;
+ }
+ const isToday=fdate===today;
+ const runs=runsOn(fdate);
+ const bigRun=runs.filter(x=>x.activityId).sort((a,b)=>b.mi-a.mi)[0];
+ const rel=isToday?'Today':parse(fdate).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'});
+ const wx=(isToday&&S.weather&&S.weather.tempF)?
+  '<span class="wx">'+S.weather.tempF+'°'+
+   (S.weather.humidity>=70?' · '+S.weather.humidity+'%':'')+'</span>':'';
+ let h;
+ if(item){
+  const t=S.plan.planTargets[item.title];
+  const done=runs.length>0;
+  br.style.setProperty('--bcolor','var(--'+kindVar[kind(item.title)]+')');
+  h='<div class="top"><div style="flex:1;min-width:0">'+
+   '<b>'+item.title.replace(/^W\d+ \w+ /,'')+'</b>'+
+   '<div class="sub">'+rel+' · '+(S.plan.planMiles[item.title]||'?')+' mi · '+estRange(item.title)+
+   (t?' · '+t.label:'')+'</div></div>'+
+   (done?'<span class="donechip">✓ '+(bigRun?bigRun.mi.toFixed(1)+' mi':'Done')+'</span>':wx)+'</div>';
+ }else{
+  br.style.setProperty('--bcolor','var(--faint)');
+  h='<div class="top"><div style="flex:1;min-width:0"><b>Rest day</b>'+
+   '<div class="sub">'+rel+' · recovery is training too</div></div>'+
+   (bigRun?'<span class="donechip">✓ '+bigRun.mi.toFixed(1)+' mi unplanned</span>':wx)+'</div>';
+ }
+ if(isToday&&r&&r.today){
+  h+='<div class="ready">'+
+   (r.today.rhr?'<span>RHR <b>'+r.today.rhr+'</b>'+(r.base?' <span style="color:var(--faint)">(7-day '+r.base+')</span>':'')+'</span>':'')+
+   (r.today.sleepH?'<span>Sleep <b>'+r.today.sleepH+'h</b></span>':'')+
+   ((r.today.bb!==null&&r.today.bb!==undefined)?'<span>Body Battery <b>'+r.today.bb+'</b></span>':'')+
+   (r.level==='ok'?'<span style="color:var(--good)">● ready</span>':'')+'</div>';
+ }
+ const hp=(S.weather&&S.weather.heatPct)||0;
+ if(hp>=0.02&&isToday&&item){
+  const t2=S.plan.planTargets[item.title];
+  h+='<div class="ready" style="color:var(--tempo)">Heat: feels like '+
+   (S.weather.feelsF||S.weather.tempF)+'° — pace costs ~'+Math.round(hp*100)+'% today.'+
+   (t2?' Heat-adjusted target: <b>'+fmtPace(Math.round(t2.fastSec*(1+hp)))+'–'+
+    fmtPace(Math.round(t2.slowSec*(1+hp)))+'/mi</b> (watch shows the official one — trust effort).':
+    ' Hydrate; effort over pace.')+'</div>';
+ }
+ const needsLog=bigRun&&!((S.ann||{})[String(bigRun.activityId)]||{}).rpe;
+ h+='<div class="cta">'+
+  (item?'<button onclick="openDetail('+item.scheduleId+')">Details</button>':'')+
+  (bigRun?'<button '+(needsLog?'class="primary" ':'')+'onclick="openRun(\''+bigRun.activityId+'\',\''+(item?item.title:'')+'\')">'+
+    (needsLog?'Log how it felt ▸':'View run ▸')+'</button>':'')+
+  '</div>';
+ br.innerHTML=h;br.style.display='block';
+ const todayItem=S.schedule.filter(i=>i.date===today)[0];
+ if(r&&r.flags.length&&todayItem&&isHard(todayItem.title)&&!runsOn(today).length){
+  bn.className='banner '+(r.level==='red'?'red':'amber');
+  bn.textContent=(r.level==='red'?'Rough recovery: ':'Heads up: ')+r.flags.join(', ')+
+   '. Today is a quality day — consider swapping it with an easy day. One moved workout beats one forced injury.';
+ }
+ if(r&&r.flags.length&&isToday&&isHard(next.title)){
+  bn.className='banner '+(r.level==='red'?'red':'amber');
+  bn.textContent=(r.level==='red'?'Rough recovery: ':'Heads up: ')+r.flags.join(', ')+
+   '. Today is a quality day — consider swapping it with an easy day (drag it on the calendar). One moved workout beats one forced injury.';
+ }
+}
+
+function renderGrid(today){
+ const y=Math.floor(S.month/12),m=S.month%12;
+ document.getElementById('mlabel').textContent=
+   new Date(y,m,1).toLocaleDateString(undefined,{month:'long',year:'numeric'});
+ const first=new Date(y,m,1);
+ let start=new Date(first); start.setDate(1-((first.getDay()+6)%7));
+ const byDate={};
+ S.schedule.forEach(i=>(byDate[i.date]=byDate[i.date]||[]).push(i));
+ const ranByDate={},ranTip={};
+ S.runs.forEach(r=>{ranByDate[r.date]=(ranByDate[r.date]||0)+r.mi;
+  ranTip[r.date]=((ranTip[r.date]||'')+' '+r.mi.toFixed(1)+'mi'+(r.pace?' @ '+r.pace+'/mi':'')).trim();});
+ const hardDates=new Set(S.schedule.filter(i=>isHard(i.title)).map(i=>i.date));
+ let html='';
+ for(let i=0;i<42;i++){
+  const d=new Date(start.getTime()+i*DAY), ds=fmt(d);
+  const other=d.getMonth()!==m;
+  html+='<div class="cell'+(other?' other':'')+(ds===today?' today':'')+'"'+
+   ' data-date="'+ds+'" onclick="cellTap(event)"'+
+   ' ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">'+
+   '<div class="dnum"><b>'+d.getDate()+'</b>'+
+   (ranByDate[ds]?'<span class="ran" onclick="ranTap(event,\''+ds+'\')" style="cursor:pointer" title="'+ranTip[ds]+' — tap for run details">✓ '+ranByDate[ds].toFixed(1)+'</span>':'')+'</div>';
+  (byDate[ds]||[]).forEach(it=>{
+   const prev=fmt(new Date(d.getTime()-DAY)),nxt=fmt(new Date(d.getTime()+DAY));
+   const clash=isHard(it.title)&&(hardDates.has(prev)||hardDates.has(nxt));
+   const short=it.title.replace(/^W\d+ \w+ /,'');
+   html+='<div class="chip '+kind(it.title)+(it.date<today?' past':'')+'" draggable="true"'+
+    ' id="c'+it.scheduleId+'" data-sid="'+it.scheduleId+'"'+
+    ' ondragstart="dragStart(event)" ondragend="dragEnd(event)"'+
+    ' onclick="chipTap(event,'+it.scheduleId+')"'+
+    ' title="'+it.title+' — tap for details">'+short+
+    '<span class="mi">'+(S.plan.planMiles[it.title]||'?')+' mi</span>'+
+    (clash?'<span class="warn" title="Back-to-back hard days">⚠️</span>':'')+'</div>';
+  });
+  html+='</div>';
+ }
+ document.getElementById('grid').innerHTML=html;
+}
+
+/* ---------------- performance ---------------- */
+function runsOn(ds){return S.runs.filter(r=>r.date===ds);}
+function assess(it){
+ const planned=S.plan.planMiles[it.title]||0;
+ const target=S.plan.planTargets[it.title];
+ const rs=runsOn(it.date);
+ if(!rs.length)return null;
+ const mi=rs.reduce((a,r)=>a+r.mi,0);
+ const main=rs.slice().sort((a,b)=>b.mi-a.mi)[0];
+ const distOk=mi>=planned*0.9;
+ let paceMsg='',paceOk=null;
+ if(target&&main.paceSec){
+  if(main.paceSec<target.fastSec-10){paceMsg='faster than target';paceOk=false;}
+  else if(main.paceSec>target.slowSec+10){paceMsg='slower than target';paceOk=false;}
+  else{paceMsg='on target';paceOk=true;}
+ }
+ return {mi:mi,paceSec:main.paceSec,distOk:distOk,paceOk:paceOk,paceMsg:paceMsg};
+}
+
+function renderWeek(today){
+ const wk=Math.floor((parse(today)-parse(S.plan.start))/DAY/7)+1;
+ const panel=document.getElementById('weekpanel');
+ if(wk<1||wk>19){panel.style.display='none';return;}
+ const items=S.schedule.filter(i=>{
+  const w=Math.floor((parse(i.date)-parse(S.plan.start))/DAY/7)+1;return w===wk;
+ }).sort((a,b)=>a.date.localeCompare(b.date));
+ if(!items.length){panel.style.display='none';return;}
+ const ran=S.weeklyActual[wk]||0,goal=S.plan.plannedWeekly[wk]||0;
+ const pct=goal?Math.min(100,Math.round(ran/goal*100)):0;
+ let h='<h3>Week '+wk+' report card <span style="color:var(--dim);font-weight:400">— '+
+   ran.toFixed(1)+' of '+Math.round(goal)+' mi ('+pct+'%)</span></h3>'+
+   '<div style="background:var(--cell);border-radius:6px;height:7px;margin:2px 0 13px">'+
+   '<div style="background:var(--good);height:7px;border-radius:6px;width:'+pct+'%"></div></div>';
+ items.forEach(it=>{
+  const t=S.plan.planTargets[it.title];const a=assess(it);
+  let status,color;
+  if(a){
+   const ok=a.distOk&&(a.paceOk!==false);
+   status='✓ '+a.mi.toFixed(1)+' mi @ '+fmtPace(a.paceSec)+'/mi'+(a.paceMsg?' · '+a.paceMsg:'');
+   color=ok?'var(--good)':'var(--tempo)';
+  }else if(it.date<today){status='✗ missed — tap to reschedule';color='var(--hard)';}
+  else if(it.date===today){status='today';color='var(--accent)';}
+  else{status='upcoming';color='var(--faint)';}
+  h+='<div onclick="openDetail('+it.scheduleId+')" style="display:flex;gap:10px;align-items:baseline;'+
+   'padding:6px 0;border-top:1px solid var(--line);cursor:pointer;flex-wrap:wrap">'+
+   '<span style="width:84px;color:var(--dim);flex:none">'+
+     parse(it.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'</span>'+
+   '<b style="flex:1;min-width:120px">'+it.title.replace(/^W\d+ \w+ /,'')+'</b>'+
+   '<span style="color:var(--dim)">'+(S.plan.planMiles[it.title]||'?')+' mi'+(t?' · '+t.label:'')+'</span>'+
+   '<span style="color:'+color+'">'+status+'</span></div>';
+ });
+ panel.innerHTML=h;panel.style.display='block';
+}
+
+function renderChart(){
+ const planned=S.plan.plannedWeekly;
+ const weeks=Object.keys(planned).map(Number).sort((a,b)=>a-b);
+ const maxv=Math.max(...weeks.map(w=>Math.max(planned[w]||0,S.weeklyActual[w]||0)),1);
+ const W=1040,H=140,bw=W/weeks.length;
+ let s='<svg viewBox="0 0 '+W+' '+(H+22)+'" xmlns="http://www.w3.org/2000/svg" style="width:100%">';
+ weeks.forEach((w,i)=>{
+  const ph=(planned[w]||0)/maxv*H, ah=(S.weeklyActual[w]||0)/maxv*H, x=i*bw;
+  s+='<rect x="'+(x+3)+'" y="'+(H-ph)+'" width="'+(bw/2-5)+'" height="'+Math.max(ph,1)+'" fill="#5b6671" opacity=".75" rx="2"/>';
+  if(S.weeklyActual[w])s+='<rect x="'+(x+bw/2-1)+'" y="'+(H-ah)+'" width="'+(bw/2-5)+'" height="'+ah+'" fill="#5DCAA5" rx="2"/>';
+  s+='<text x="'+(x+bw/2)+'" y="'+(H+15)+'" fill="#93a0ad" font-size="10.5" text-anchor="middle">W'+w+'</text>';
+ });
+ document.getElementById('chart').innerHTML=s+'</svg>';
+}
+
+function renderRamp(wk){
+ const el=document.getElementById('rampnote');el.textContent='';
+ if(wk<2||wk>19)return;
+ const get=w=>S.weeklyActual[w]!==undefined&&w<wk?S.weeklyActual[w]:S.plan.plannedWeekly[w];
+ const hist=[wk-1,wk-2,wk-3].filter(w=>w>=1).map(get).filter(v=>v);
+ if(!hist.length)return;
+ const avg=hist.reduce((a,b)=>a+b,0)/hist.length;
+ const cur=S.plan.plannedWeekly[wk]||0;
+ if(!avg||!cur)return;
+ const pct=Math.round((cur/avg-1)*100);
+ if(pct>25)el.innerHTML='⚠️ This week is <b style="color:var(--tempo)">+'+pct+'%</b> over your recent average — a big jump. Protect sleep, keep easy days truly easy.';
+ else if(pct<-20)el.textContent='Recovery/taper week: '+pct+'% vs recent — let it be easy, the fitness is already in the bank.';
+}
+
+/* ---------------- drag & drop + tap-to-move ---------------- */
+let dragSid=null;
+function dragStart(e){dragSid=e.target.dataset.sid;e.target.classList.add('dragging');
+ e.dataTransfer.effectAllowed='move';}
+function dragEnd(e){e.target.classList.remove('dragging');
+ document.querySelectorAll('.cell.over').forEach(c=>c.classList.remove('over'));}
+function dragOver(e){e.preventDefault();e.currentTarget.classList.add('over');}
+function dragLeave(e){e.currentTarget.classList.remove('over');}
+function drop(e){
+ e.preventDefault();
+ const cell=e.currentTarget;cell.classList.remove('over');
+ const it=S.schedule.find(i=>String(i.scheduleId)===String(dragSid));
+ const nd=cell.dataset.date;
+ if(it&&nd&&it.date!==nd)applyMove(it,nd,true);
+}
+function chipTap(e,sid){
+ if(S.moveItem)return;        // bubbling to cellTap completes a move
+ e.stopPropagation();
+ openDetail(sid);
+}
+function cellTap(e){
+ if(!S.moveItem)return;
+ const nd=e.currentTarget.dataset.date;
+ const it=S.moveItem;
+ exitMoveMode();
+ if(nd&&it.date!==nd)applyMove(it,nd,true);
+}
+function enterMoveMode(sid){
+ const it=S.schedule.find(i=>String(i.scheduleId)===String(sid));
+ if(!it)return;
+ closeDetail();
+ if(S.view!=='plan')setView('plan');
+ if(S.planMode!=='month'){S.planMode='month';render();}  // moving needs the grid
+ S.moveItem=it;
+ document.body.classList.add('movemode');
+ toast('Tap a day to move <b>'+it.title.replace(/^W\d+ \w+ /,'')+'</b>',{sticky:1,cancel:1});
+}
+function exitMoveMode(){
+ S.moveItem=null;document.body.classList.remove('movemode');hideToast();
+}
+function applyMove(it,newDate,allowUndo){
+ const old=it.date;
+ it.date=newDate;render();
+ jpost('/api/move',{scheduleId:it.scheduleId,workoutId:it.workoutId,date:newDate})
+  .then(()=>{
+   if(allowUndo){S.undo={it:it,back:old};
+    toast('<b>'+it.title.replace(/^W\d+ \w+ /,'')+'</b>&nbsp;→ '+
+     parse(newDate).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}),
+     {undo:1});}
+   load(true);
+  })
+  .catch(err=>{it.date=old;render();toast('Move failed — put it back. '+err.message,{err:1});});
+}
+function doUndo(){
+ if(!S.undo)return;
+ applyMove(S.undo.it,S.undo.back,false);
+ toast('Undone');S.undo=null;
+}
+
+/* ---------------- workout detail ---------------- */
+function openDetail(sid){
+ const it=S.schedule.find(i=>String(i.scheduleId)===String(sid));
+ if(!it)return;
+ const t=S.plan.planTargets[it.title],a=assess(it),isRepeat=/\dx/.test(it.title);
+ let h='<h3>'+it.title+'</h3><p>'+
+   parse(it.date).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})+'</p>'+
+   '<div class="preview" style="margin-top:0">'+
+   '<b>Plan:</b> '+(S.plan.planMiles[it.title]||'?')+' mi'+
+   (t?' · target '+t.label:' · no pace target (easy)')+'<br>';
+ if(a){
+  h+='<b>You ran:</b> '+a.mi.toFixed(2)+' mi @ '+fmtPace(a.paceSec)+'/mi<br>'+
+   '<b>Distance:</b> '+(a.distOk?'✓ covered':'▲ short of plan')+'<br>'+
+   (t&&a.paceMsg?'<b>Pace:</b> '+(a.paceOk?'🎯 ':'▲ ')+a.paceMsg+'<br>':'')+
+   (isRepeat?'<span style="color:var(--faint)">Interval day: average pace includes recovery jogs — check lap splits in Garmin Connect for true rep paces.</span>':'');
+ }else if(it.date<S.plan.today){
+  h+='<span style="color:var(--hard)">No run recorded this day.</span>';
+ }else{
+  h+='<span style="color:var(--faint)">Not run yet.</span>';
+ }
+ const big=runsOn(it.date).filter(r=>r.activityId).sort((x,y)=>y.mi-x.mi)[0];
+ const missed=it.date<S.plan.today&&!big;
+ const annD=big?((S.ann||{})[String(big.activityId)]||{}):{};
+ if(annD.rpe||annD.note||annD.shoes){
+  h+='<br><b>Your log:</b> '+[annD.rpe?'RPE '+annD.rpe:null,
+    annD.shoes?escapeHTML(shoeName(annD.shoes)):null].filter(Boolean).join(' · ')+
+   (annD.note?'<br><span style="color:var(--faint)">“'+escapeHTML(annD.note)+'”</span>':'');
+ }
+ h+='</div><div class="row">'+
+  (big?'<button onclick="closeDetail();openRun(\''+big.activityId+'\',\''+it.title.replace(/'/g,'')+'\')">View run ▸</button>':'')+
+  (missed?'<button class="primary" onclick="openReplan('+it.scheduleId+')">Replan ▸</button>':'')+
+  '<button onclick="enterMoveMode('+it.scheduleId+')">Move to another day…</button>'+
+  '<button '+(missed?'':'class="primary" ')+'onclick="closeDetail()">Done</button></div>';
+ document.getElementById('dmodal').innerHTML=h;
+ document.getElementById('dscrim').classList.add('show');
+}
+function closeDetail(){document.getElementById('dscrim').classList.remove('show');}
+
+/* ---------------- missed-workout replanning ---------------- */
+function openReplan(sid){
+ const it=S.schedule.find(i=>String(i.scheduleId)===String(sid));
+ if(!it)return;
+ const hard=isHard(it.title),today=S.plan.today;
+ let recDate=null;
+ if(hard){
+  const occupied=new Set(S.schedule.filter(x=>x.scheduleId!==it.scheduleId).map(x=>x.date));
+  const hardSet=new Set(S.schedule.filter(x=>x.scheduleId!==it.scheduleId&&isHard(x.title)).map(x=>x.date));
+  const near=d=>hardSet.has(d)||hardSet.has(fmt(new Date(parse(d).getTime()-DAY)))||
+               hardSet.has(fmt(new Date(parse(d).getTime()+DAY)));
+  const preferWE=/mi LR|MP Finish/.test(it.title);
+  for(let k=1;k<=10;k++){
+   const d=fmt(new Date(parse(today).getTime()+k*DAY)),dow=parse(d).getDay();
+   if(occupied.has(d)||near(d))continue;
+   if(preferWE&&k<=7&&dow!==6&&dow!==0)continue;
+   recDate=d;break;
+  }
+ }
+ const recLabel=recDate?parse(recDate).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'}):null;
+ let h='<h3>Replan: '+it.title.replace(/^W\d+ \w+ /,'')+'</h3>'+
+  '<p>Missed on '+parse(it.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'.</p>'+
+  '<div class="preview" style="margin-top:0">'+
+  (hard?
+   (recDate?'This is a key session — worth keeping. <b>'+recLabel+'</b> is the first clean day '+
+    '(no hard days adjacent, nothing displaced).':
+    'This is a key session but the next 10 days are full — absorbing it is cleaner than cramming.'):
+   'Easy miles are volume filler — absorbing a missed one is what a coach would tell you. '+
+   'Don’t chase it; the plan’s intact.')+
+  '</div><div class="row">'+
+  '<button onclick="closeDetail()">Cancel</button>'+
+  (recDate?'<button onclick="applyReplan('+sid+',\'skip\',null)">Skip it</button>'+
+   '<button class="primary" onclick="applyReplan('+sid+',\'move\',\''+recDate+'\')">Move to '+recLabel+'</button>':
+   '<button class="primary" onclick="applyReplan('+sid+',\'skip\',null)">Absorb it</button>')+
+  '</div>';
+ document.getElementById('dmodal').innerHTML=h;
+ document.getElementById('dscrim').classList.add('show');
+}
+async function applyReplan(sid,act,dateStr){
+ const it=S.schedule.find(i=>String(i.scheduleId)===String(sid));
+ closeDetail();
+ try{
+  if(act==='move')await jpost('/api/move',{scheduleId:it.scheduleId,workoutId:it.workoutId,date:dateStr});
+  else await jpost('/api/unschedule',{scheduleId:it.scheduleId});
+  toast(act==='move'?'Rescheduled — sync your watch':'Absorbed. Eyes forward.');
+  load(true);
+ }catch(e){toast('Replan failed: '+e.message,{err:1});}
+}
+
+/* ---------------- run detail sheet ---------------- */
+const fmtDur=s=>{const h=Math.floor(s/3600),m=Math.floor(s/60)-h*60,x=s-h*3600-m*60;
+ return (h?h+':':'')+String(m).padStart(h?2:1,'0')+':'+String(x).padStart(2,'0');};
+function ranTap(e,ds){
+ e.stopPropagation();
+ if(S.moveItem)return;
+ const rs=runsOn(ds).filter(r=>r.activityId).sort((a,b)=>b.mi-a.mi);
+ if(!rs.length)return;
+ const it=S.schedule.find(i=>i.date===ds);
+ openRun(rs[0].activityId,it?it.title:null);
+}
+let CUR_AID=null,CUR_RPE=null;
+async function openRun(aid,title){
+ CUR_AID=aid;CUR_RPE=((S.ann||{})[String(aid)]||{}).rpe||null;
+ const m=document.getElementById('rmodal');
+ m.innerHTML='<div class="skel" style="padding:60px 20px"><i></i>Loading run from Garmin…</div>';
+ document.getElementById('rscrim').classList.add('show');
+ let j;
+ try{j=await jget('/api/run/'+aid);}
+ catch(e){m.innerHTML='<h3>Couldn’t load run</h3><p>'+e.message+
+  '</p><div class="row"><button onclick="closeRun()">Close</button></div>';return;}
+ renderRun(j,title?S.plan.planTargets[title]:null,title);
+}
+function closeRun(){document.getElementById('rscrim').classList.remove('show');}
+
+/* ---- interactive run analysis engine (Strava-style scrub/select) ---- */
+let RS=null;
+const RW=520,RPAD=14;
+function paceCol(t){
+ t=Math.max(0,Math.min(1,t));
+ const a=[93,202,165],b=[240,153,123];
+ return 'rgb('+a.map((v,k)=>Math.round(v+(b[k]-v)*t)).join(',')+')';
+}
+function rx(i){return RPAD+(RS.d[i]/RS.d[RS.n-1])*(RW-2*RPAD);}
+
+function routeSvgX(rt){
+ if(!rt||rt.length<8){RS.rpts=null;return'';}
+ const lats=rt.map(p=>p[0]),lons=rt.map(p=>p[1]);
+ const la0=Math.min(...lats),la1=Math.max(...lats),lo0=Math.min(...lons),lo1=Math.max(...lons);
+ const H=170,kx=Math.cos((la0+la1)/2*Math.PI/180);
+ const spanX=(lo1-lo0)*kx||1e-9,spanY=(la1-la0)||1e-9;
+ const sc=Math.min((RW-2*RPAD)/spanX,(H-2*RPAD)/spanY);
+ const ox=(RW-spanX*sc)/2,oy=(H-spanY*sc)/2;
+ const pts=rt.map(p=>[ox+((p[1]-lo0)*kx)*sc,oy+(la1-p[0])*sc]);
+ RS.rpts=pts;
+ // pace-colored segments: see where you surged and where you faded
+ const ps=(RS.pace||[]).filter(x=>x!=null).slice().sort((a,b)=>a-b);
+ const p10=ps[Math.floor(ps.length*0.1)]||0,p90=ps[Math.floor(ps.length*0.9)]||1;
+ const step=Math.max(1,Math.floor(pts.length/56));
+ let segs='';
+ for(let i=0;i<pts.length-1;i+=step){
+  const j=Math.min(pts.length-1,i+step);
+  const si=Math.round(i/(pts.length-1)*(RS.n-1));
+  const pv=RS.pace[si];
+  const col=(pv!=null&&p90>p10)?paceCol((pv-p10)/(p90-p10)):'#3ec6c0';
+  segs+='<polyline points="'+pts.slice(i,j+1).map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')+
+   '" fill="none" stroke="'+col+'" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>';
+ }
+ return '<svg viewBox="0 0 '+RW+' '+H+'" style="width:100%;background:var(--cell);border-radius:12px">'+segs+
+  '<polyline id="rsel" points="" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>'+
+  '<circle cx="'+pts[0][0].toFixed(1)+'" cy="'+pts[0][1].toFixed(1)+'" r="5" fill="var(--good)"/>'+
+  '<circle cx="'+pts[pts.length-1][0].toFixed(1)+'" cy="'+pts[pts.length-1][1].toFixed(1)+'" r="5" fill="#fff"/>'+
+  '<circle id="rdot" r="6.5" fill="#fff" stroke="#101418" stroke-width="2.5" style="display:none"/></svg>';
+}
+
+function chartX(id,vals,H,color,invert){
+ const pts=[];
+ for(let i=0;i<RS.n;i++)if(vals[i]!=null)pts.push(i);
+ if(pts.length<5)return'';
+ const ys=pts.map(i=>vals[i]);
+ const v0=Math.min(...ys),v1=Math.max(...ys),sp=(v1-v0)||1;
+ const path=pts.map((i,k)=>{
+  let y=(vals[i]-v0)/sp;if(invert)y=1-y;
+  return (k?'L':'M')+rx(i).toFixed(1)+' '+(H-7-y*(H-14)).toFixed(1);
+ }).join(' ');
+ return '<svg viewBox="0 0 '+RW+' '+H+'" style="width:100%;background:var(--cell);border-radius:10px">'+
+  '<rect id="sel-'+id+'" class="selr" x="0" y="0" width="0" height="'+H+'"/>'+
+  '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2"/>'+
+  '<line id="cur-'+id+'" y1="0" y2="'+H+'" x1="0" x2="0" stroke="#f0f3f6" stroke-width="1" opacity=".85" style="display:none"/></svg>';
+}
+
+function rngStats(a,b){
+ let ps=[],hs=[];
+ for(let i=a;i<=b;i++){if(RS.pace[i]!=null)ps.push(RS.pace[i]);if(RS.hr[i]!=null)hs.push(RS.hr[i]);}
+ return {mi:RS.d[b]-RS.d[a],
+  pace:ps.length?Math.round(ps.reduce((x,y)=>x+y,0)/ps.length):null,
+  hr:hs.length?Math.round(hs.reduce((x,y)=>x+y,0)/hs.length):null};
+}
+function setSel(a,b,lap){
+ if(a>b){const t=a;a=b;b=t;}
+ RS.sel=(RS.sel&&RS.sel[0]===a&&RS.sel[1]===b)?null:[a,b];
+ RS.selLap=RS.sel?lap:null;
+ drawSel();
+}
+function clearSel(){RS.sel=null;RS.selLap=null;drawSel();}
+function drawSel(){
+ const sel=RS.sel;
+ RS.charts.forEach(id=>{
+  const r=document.getElementById('sel-'+id);
+  if(r){r.setAttribute('x',sel?rx(sel[0]):0);r.setAttribute('width',sel?Math.max(2,rx(sel[1])-rx(sel[0])):0);}
+ });
+ const rl=document.getElementById('rsel');
+ if(rl&&RS.rpts){
+  rl.setAttribute('points',!sel?'':(function(){
+   const m=RS.rpts.length-1;
+   const a=Math.round(sel[0]/(RS.n-1)*m),b=Math.round(sel[1]/(RS.n-1)*m);
+   return RS.rpts.slice(a,b+1).map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');})());
+ }
+ document.querySelectorAll('.splitrow').forEach((el,i)=>el.classList.toggle('on',RS.selLap===i));
+ const st=document.getElementById('selstats');
+ if(!st)return;
+ if(sel){
+  const g=rngStats(sel[0],sel[1]);
+  st.innerHTML='<b>'+g.mi.toFixed(2)+' mi selected</b>'+
+   (g.pace?'<span>'+fmtPace(g.pace)+'/mi</span>':'')+
+   (g.hr?'<span>'+g.hr+' bpm</span>':'')+
+   '<button class="ghost" style="margin-left:auto;padding:0 6px" onclick="clearSel()">✕ clear</button>';
+ }else{
+  st.innerHTML='<span style="color:var(--dim)">Touch or hover the charts to scrub · tap a split to inspect it'+
+   (matchMedia('(pointer:fine)').matches?' · drag to select a stretch':'')+'</span>';
+ }
+}
+function selectLap(k){
+ let cum=0;
+ for(let i=0;i<k;i++)cum+=RS.laps[i].mi;
+ const end=cum+RS.laps[k].mi;
+ let a=0,b=RS.n-1;
+ for(let i=0;i<RS.n;i++){if(RS.d[i]<=cum)a=i;if(RS.d[i]<=end)b=i;}
+ setSel(a,b,k);
+}
+function updateScrub(i){
+ RS.charts.forEach(id=>{
+  const l=document.getElementById('cur-'+id);
+  if(l){l.style.display='';l.setAttribute('x1',rx(i));l.setAttribute('x2',rx(i));}
+ });
+ const dot=document.getElementById('rdot');
+ if(dot&&RS.rpts){
+  const p=RS.rpts[Math.round(i/(RS.n-1)*(RS.rpts.length-1))];
+  dot.style.display='';dot.setAttribute('cx',p[0].toFixed(1));dot.setAttribute('cy',p[1].toFixed(1));
+ }
+ const tip=document.getElementById('ctip');
+ if(tip){
+  tip.style.display='block';
+  tip.style.left=(rx(i)/RW*100)+'%';tip.style.top='2px';
+  tip.innerHTML='mi '+RS.d[i].toFixed(2)+
+   (RS.pace[i]!=null?' · <b>'+fmtPace(RS.pace[i])+'/mi</b>':'')+
+   (RS.hr[i]!=null?' · '+RS.hr[i]+' bpm':'')+
+   (RS.elev&&RS.elev[i]!=null?' · '+Math.round(RS.elev[i])+'′':'');
+ }
+}
+function hideScrub(){
+ RS.charts.forEach(id=>{const l=document.getElementById('cur-'+id);if(l)l.style.display='none';});
+ const dot=document.getElementById('rdot');if(dot)dot.style.display='none';
+ const tip=document.getElementById('ctip');if(tip)tip.style.display='none';
+}
+function initRunUX(){
+ const box=document.getElementById('chartsbox');
+ if(!box||!RS||RS.n<5)return;
+ const fracIdx=e=>{
+  const r=box.getBoundingClientRect();
+  const fx=(e.clientX-r.left)/r.width*RW;
+  const frac=(fx-RPAD)/(RW-2*RPAD);
+  return Math.max(0,Math.min(RS.n-1,Math.round(frac*(RS.n-1))));
+ };
+ box.addEventListener('pointerdown',e=>{RS.drag={x:e.clientX,i:fracIdx(e),t:e.pointerType};});
+ box.addEventListener('pointermove',e=>{
+  const i=fracIdx(e);
+  if(RS.drag&&RS.drag.t==='mouse'&&e.buttons&&Math.abs(e.clientX-RS.drag.x)>10)setSel(RS.drag.i,i,null);
+  updateScrub(i);
+ });
+ box.addEventListener('pointerup',()=>{RS.drag=null;});
+ box.addEventListener('pointerleave',()=>{RS.drag=null;hideScrub();});
+ drawSel();
+}
+function zonesHtml(){
+ const hs=(RS.hr||[]).filter(x=>x!=null);
+ if(hs.length<10)return'';
+ const zmax=Math.max(RS.maxHr||0,Math.max(...hs),185);
+ const th=[0,0.6,0.7,0.8,0.9].map(p=>Math.round(p*zmax));
+ const cols=['#5b6671','#3ec6c0','#34c77b','#f5a623','#ff6b6b'];
+ const names=['Recovery','Easy','Aerobic','Threshold','Max'];
+ let counts=[0,0,0,0,0];
+ hs.forEach(v=>{let z=0;for(let k=4;k>=0;k--){if(v>=th[k]){z=k;break;}}counts[z]++;});
+ let h='<h4>Heart rate zones</h4>';
+ counts.forEach((c,k)=>{
+  const pct=c/hs.length;
+  const secs=Math.round(pct*RS.durSec);
+  h+='<div class="zrow"><span class="zl">Z'+(k+1)+' '+names[k]+'</span>'+
+   '<div class="zbar"><i style="width:'+(pct*100).toFixed(0)+'%;background:'+cols[k]+'"></i></div>'+
+   '<span class="zt">'+(pct*100).toFixed(0)+'% · '+fmtDur(secs)+'</span></div>';
+ });
+ return h;
+}
+
+function renderRun(j,target,title){
+ const s=j.summary||{},laps=j.laps||[],ser=j.series||{};
+ RS={d:ser.d||[],pace:ser.pace||[],hr:ser.hr||[],elev:ser.elev||[],
+     laps:laps,n:(ser.d||[]).length,durSec:s.durSec||0,maxHr:s.maxHr,
+     sel:null,selLap:null,charts:[],rpts:null,drag:null};
+ let h='<h3>'+escapeHTML(title||s.name)+'</h3><p>'+escapeHTML(s.name)+'</p>';
+ h+=routeSvgX(j.route);
+ const fastLaps=laps.filter(l=>l.mi>=0.9).map(l=>l.paceSec);
+ h+='<div class="statgrid">'+
+  '<div><b>'+(s.mi!=null?s.mi.toFixed(2):'—')+'</b><span>miles</span></div>'+
+  '<div><b>'+(s.durSec?fmtDur(s.durSec):'—')+'</b><span>time</span></div>'+
+  '<div><b>'+(s.paceSec?fmtPace(s.paceSec):'—')+'</b><span>avg /mi</span></div>'+
+  '<div><b>'+(s.avgHr||'—')+'</b><span>avg hr</span></div>'+
+  '<div><b>'+(s.maxHr||'—')+'</b><span>max hr</span></div>'+
+  '<div><b>'+(s.cad?Math.round(s.cad)+'':'—')+'</b><span>cadence</span></div>'+
+  '<div><b>'+(s.elevFt!=null?s.elevFt+'′':'—')+'</b><span>elev gain</span></div>'+
+  '<div><b>'+(fastLaps.length?fmtPace(Math.min.apply(null,fastLaps)):'—')+'</b><span>best split</span></div>'+
+  '<div><b>'+(RS.n?RS.d[RS.n-1].toFixed(1):'—')+'</b><span>gps mi</span></div></div>';
+ if(laps.length>1){
+  // laps vs target: bar height ∝ speed, white band = target pace range
+  const v=laps.map(l=>1/l.paceSec);
+  let vmin=Math.min(...v),vmax=Math.max(...v);
+  if(target){vmin=Math.min(vmin,1/target.slowSec);vmax=Math.max(vmax,1/target.fastSec);}
+  const lo=vmin*0.93,span=(vmax*1.03-lo)||1e-9;
+  const hpc=x=>Math.round((1/x-lo)/span*100);
+  h+='<h4>Laps'+(target?' vs target ('+target.label+')':'')+'</h4><div class="lapbars">';
+  if(target){
+   const top=hpc(target.fastSec),bot=hpc(target.slowSec);
+   h+='<div class="tband" style="bottom:'+bot+'%;height:'+Math.max(3,top-bot)+'%"></div>';
+  }
+  laps.forEach(l=>{h+='<div class="b" style="height:'+Math.max(4,hpc(l.paceSec))+'%" title="'+
+    l.mi.toFixed(2)+' mi @ '+fmtPace(l.paceSec)+'/mi"></div>';});
+  h+='</div>';
+  h+='<h4>Splits — tap one to inspect it</h4>';
+  const fastest=Math.min(...laps.map(l=>l.paceSec));
+  laps.forEach((l,i)=>{
+   const w=35+55*(fastest/l.paceSec);
+   let pm='';
+   if(i>0){const dlt=laps[i-1].paceSec-l.paceSec;
+    pm='<span class="pm" style="color:'+(dlt>=0?'var(--good)':'var(--hard)')+'">'+
+     (dlt>=0?'+':'−')+fmtPace(Math.abs(dlt))+'</span>';}
+   h+='<div class="splitrow" onclick="selectLap('+i+')"><span class="n">'+
+    (l.mi>=0.95&&l.mi<=1.05?(i+1):l.mi.toFixed(2))+
+    '</span><div class="bar" style="width:'+w.toFixed(0)+'%">'+fmtPace(l.paceSec)+'/mi</div>'+pm+'</div>';
+  });
+ }
+ if(RS.n>=5){
+  h+='<h4>Analysis</h4><div class="selstats" id="selstats"></div>'+
+   '<div class="chartwrap" id="chartsbox">';
+  if(RS.pace.some(x=>x!=null)){h+=chartX('pc',RS.pace,86,'#3ec6c0',true);RS.charts.push('pc');}
+  if(RS.hr.some(x=>x!=null)){h+=chartX('hr',RS.hr,70,'#ff6b6b',false);RS.charts.push('hr');}
+  if(RS.elev&&RS.elev.some(x=>x!=null)){h+=chartX('el',RS.elev,52,'#5b8db8',false);RS.charts.push('el');}
+  h+='<div class="ctip" id="ctip"></div></div>';
+  h+=zonesHtml();
+ }
+ const ann=(S.ann||{})[String(CUR_AID)]||{};
+ h+='<h4>How did it feel? <span id="rpeVal" style="color:var(--accent);font-weight:600;text-transform:none;letter-spacing:0">'+
+   (ann.rpe?ann.rpe+' · '+rpeName(ann.rpe):'slide to rate')+'</span></h4>'+
+  '<input type="range" id="rpeSlide" min="1" max="10" step="1" value="'+(ann.rpe||5)+
+   '" oninput="rpeLab(this.value)" style="width:100%">'+
+  '<div style="display:flex;color:var(--faint);font-size:11px;justify-content:space-between;margin:2px 2px 9px">'+
+  '<span>1–3 recovery</span><span>4–6 easy</span><span>7–8 hard</span><span>9–10 max</span></div>'+
+  '<input id="annNote" placeholder="Notes — how it went, what hurt, what worked" value="'+
+   escapeHTML(ann.note||'')+'" style="width:100%;background:var(--cell);'+
+   'border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:10px 11px;font-size:16px;margin-bottom:8px">'+
+  (function(){
+   const known=(S.gear||[]).filter(g=>!g.retired);
+   const def=known.find(g=>g.isDefault);
+   const selKey=ann.shoes||(def?def.key:'');
+   let s='<select id="annShoesSel" onchange="shoesSel(this)" style="width:100%;background:var(--cell);'+
+    'border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:10px 11px;font-size:16px;margin-bottom:8px">'+
+    '<option value="">Shoes — none logged</option>';
+   known.forEach(g=>{s+='<option value="'+escapeHTML(g.key)+'"'+(selKey===g.key?' selected':'')+'>'+
+     escapeHTML(g.nickname||g.display)+(g.isDefault?' · default':'')+'</option>';});
+   if(ann.shoes&&!known.some(g=>g.key===ann.shoes))
+    s+='<option value="'+escapeHTML(ann.shoes)+'" selected>'+escapeHTML(ann.shoes)+'</option>';
+   s+='<option value="__new">+ New shoe…</option></select>'+
+    '<input id="annShoesNew" placeholder="New shoe name (e.g. Superblast 2)" style="display:none;width:100%;'+
+    'background:var(--cell);border:1px solid var(--line);color:var(--tx);border-radius:9px;'+
+    'padding:10px 11px;font-size:16px">';
+   return s;})();
+ h+='<div class="row"><button onclick="closeRun()">Close</button>'+
+  '<button class="primary" onclick="saveAnn(true)">Save & done</button></div>';
+ document.getElementById('rmodal').innerHTML=h;
+ initRunUX();
+}
+function rpeName(v){v=+v;return v<=3?'Recovery':(v<=6?'Easy':(v<=8?'Hard':'Max effort'));}
+function rpeLab(v){
+ CUR_RPE=+v;
+ const el=document.getElementById('rpeVal');
+ if(el)el.textContent=v+' · '+rpeName(v);
+}
+function shoesSel(s){
+ document.getElementById('annShoesNew').style.display=s.value==='__new'?'':'none';
+ if(s.value==='__new')document.getElementById('annShoesNew').focus();
+}
+async function saveAnn(close){
+ const note=document.getElementById('annNote').value;
+ const sel=document.getElementById('annShoesSel');
+ let shoes=sel?sel.value:'';
+ if(shoes==='__new')shoes=document.getElementById('annShoesNew').value.trim();
+ try{
+  await jpost('/api/annotate',{activityId:CUR_AID,rpe:CUR_RPE,note:note,shoes:shoes});
+  S.ann=S.ann||{};S.ann[String(CUR_AID)]={rpe:CUR_RPE,note:note,shoes:shoes};
+  toast('Logged — this is your data now');
+  if(close)closeRun();
+  jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{render();});
+ }catch(e){toast('Save failed: '+e.message,{err:1});}
+}
+
+function gearEdit(key){
+ const g=(S.gear||[]).find(x=>x.key===key);
+ if(!g)return;
+ const lbl=t=>'<label style="display:block;font-size:12px;color:var(--dim);margin:8px 0 4px">'+t+'</label>';
+ let h='<h3>'+escapeHTML(g.nickname||g.display)+'</h3><p>'+g.mi.toFixed(0)+' mi across '+g.runs+' runs'+
+  (g.last?' · last used '+g.last:'')+'</p>'+
+  lbl('Nickname')+'<input id="gDisp" value="'+escapeHTML(g.nickname||g.display)+'">'+
+  '<div style="display:flex;gap:8px">'+
+  '<div style="flex:1">'+lbl('Brand')+'<input id="gBrand" value="'+escapeHTML(g.brand||'')+'"></div>'+
+  '<div style="flex:1">'+lbl('Model')+'<input id="gModel" value="'+escapeHTML(g.model||'')+'"></div></div>'+
+  lbl('Miles before timely (if not new when first logged)')+
+  '<input id="gStart" type="number" value="0">'+
+  lbl('Retire at (mi)')+'<input id="gThresh" type="number" value="'+g.threshold+'">'+
+  '<div class="row">'+
+  '<button onclick="gearSave(\''+key+'\',true,false)" style="color:var(--hard)">Retire</button>'+
+  (g.isDefault?'':'<button onclick="gearSave(\''+key+'\',false,true)">Make default</button>')+
+  '<button onclick="closeDetail()">Cancel</button>'+
+  '<button class="primary" onclick="gearSave(\''+key+'\',false,false)">Save</button></div>';
+ document.getElementById('dmodal').innerHTML=h;
+ document.getElementById('dscrim').classList.add('show');
+}
+async function gearSave(key,retire,makeDefault){
+ try{
+  await jpost('/api/gear',{key:key,display:document.getElementById('gDisp').value,
+   brand:document.getElementById('gBrand').value,
+   model:document.getElementById('gModel').value,
+   startMi:parseFloat(document.getElementById('gStart').value)||0,
+   thresholdMi:parseFloat(document.getElementById('gThresh').value)||400,
+   retired:retire,isDefault:makeDefault?true:undefined});
+  closeDetail();toast(retire?'Retired — thanks for the miles':
+   (makeDefault?'Default trainer set':'Gear updated'));
+  const j=await jget('/api/gear');S.gear=j.gear||[];render();
+ }catch(e){toast('Gear save failed: '+e.message,{err:1});}
+}
+
+/* ---------------- vacation mode: plan around it ---------------- */
+let VPLAN=null;
+function openVacation(){
+ document.getElementById('scrim').classList.add('show');
+ ['vfrom','vto'].forEach(id=>document.getElementById(id).oninput=previewVacation);
+ previewVacation();
+}
+function closeVacation(){document.getElementById('scrim').classList.remove('show');}
+
+function buildVacationPlan(f,t){
+ // Rule-based coach: easy/strides in range → skip (volume filler).
+ // Long runs and quality → first clean day after return, hard days never
+ // adjacent. Long runs prefer weekends.
+ const hits=S.schedule.filter(i=>i.date>=f&&i.date<=t)
+   .sort((a,b)=>a.date.localeCompare(b.date));
+ const occupied=new Set(S.schedule.filter(i=>i.date<f||i.date>t).map(i=>i.date));
+ const hardSet=new Set(S.schedule.filter(i=>(i.date<f||i.date>t)&&isHard(i.title)).map(i=>i.date));
+ const near=d=>hardSet.has(d)||hardSet.has(fmt(new Date(parse(d).getTime()-DAY)))||
+              hardSet.has(fmt(new Date(parse(d).getTime()+DAY)));
+ const isLong=ti=>/mi LR|MP Finish/.test(ti);
+ const actions=[];
+ function place(it,preferWeekend){
+  for(let k=1;k<=14;k++){
+   const d=fmt(new Date(parse(t).getTime()+k*DAY));
+   const dow=parse(d).getDay();
+   if(occupied.has(d))continue;
+   if(near(d))continue;
+   if(preferWeekend&&k<=9&&dow!==6&&dow!==0)continue;
+   occupied.add(d);hardSet.add(d);
+   actions.push({act:'move',it:it,to:d});
+   return;
+  }
+  actions.push({act:'skip',it:it,why:'no clean slot'});
+ }
+ hits.filter(i=>isLong(i.title)).forEach(i=>place(i,true));
+ hits.filter(i=>!isLong(i.title)&&isHard(i.title)).forEach(i=>place(i,false));
+ hits.filter(i=>!isHard(i.title)).forEach(i=>actions.push({act:'skip',it:i}));
+ actions.sort((a,b)=>a.it.date.localeCompare(b.it.date));
+ return actions;
+}
+
+function previewVacation(){
+ const f=document.getElementById('vfrom').value,t=document.getElementById('vto').value;
+ const pv=document.getElementById('vpreview'),go=document.getElementById('vgo');
+ VPLAN=null;
+ if(!f||!t||t<f){pv.textContent='Pick dates to preview.';go.disabled=true;return;}
+ const acts=buildVacationPlan(f,t);
+ if(!acts.length){pv.textContent='No workouts in that range — enjoy the trip.';go.disabled=true;return;}
+ VPLAN={from:f,to:t,actions:acts};
+ pv.innerHTML=acts.map(a=>{
+  const name=a.it.title.replace(/^W\d+ /,'');
+  if(a.act==='skip')
+   return '<span style="color:var(--faint)">skip</span> '+name+(a.why?' <span style="color:var(--faint)">('+a.why+')</span>':'');
+  return '<span style="color:var(--accent)">move</span> '+name+' → <b>'+
+   parse(a.to).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'</b>';
+ }).join('<br>');
+ const moves=acts.filter(a=>a.act==='move').length;
+ go.disabled=false;
+ go.textContent='Apply: move '+moves+', skip '+(acts.length-moves);
+}
+
+async function doVacation(){
+ if(!VPLAN)return;
+ const acts=VPLAN.actions;
+ closeVacation();toast('Re-planning around your trip…',{sticky:1});
+ try{
+  for(const a of acts){
+   if(a.act==='move')
+    await jpost('/api/move',{scheduleId:a.it.scheduleId,workoutId:a.it.workoutId,date:a.to});
+   else
+    await jpost('/api/unschedule',{scheduleId:a.it.scheduleId});
+  }
+  toast('Done — plan adjusted around your vacation. Sync your watch.');
+  load(true);
+ }catch(e){toast('Vacation plan failed partway: '+e.message+' — hit Refresh to see current state.',{err:1});load(true);}
+}
+
+try{setView(localStorage.getItem('coachView')||'today');}catch(e){setView('today');}
+load(false);
+
+</script></div></body></html>

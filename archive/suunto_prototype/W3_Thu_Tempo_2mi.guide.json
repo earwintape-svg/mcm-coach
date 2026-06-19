@@ -1,0 +1,103 @@
+{
+  "type": "sequence",
+  "name": "W3 Thu Tempo 2mi",
+  "description": "Tempo 2mi \u2014 Week 3 Thu. From timely's MCM 2026 plan.",
+  "shortDescription": "MCM26 W3",
+  "owner": "timely",
+  "url": "https://github.com/",
+  "activities": [
+    1
+  ],
+  "usage": "workout",
+  "steps": [
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 2414.01,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 2.555,
+          "max": 2.823,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 2414.01
+          }
+        }
+      ],
+      "title": "Warmup",
+      "notification": {
+        "title": "Warmup",
+        "text": "Warmup"
+      }
+    },
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 3218.68,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 3.424,
+          "max": 3.537,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 3218.68
+          }
+        }
+      ],
+      "title": "Tempo \u2014",
+      "notification": {
+        "title": "Tempo \u2014",
+        "text": "Tempo \u2014 comfortably hard"
+      }
+    },
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 2414.01,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 2.555,
+          "max": 2.823,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 2414.01
+          }
+        }
+      ],
+      "title": "Cooldown",
+      "notification": {
+        "title": "Cooldown",
+        "text": "Cooldown"
+      }
+    }
+  ],
+  "localDate": "2026-07-02",
+  "externalId": "timely-w3-thu"
+}

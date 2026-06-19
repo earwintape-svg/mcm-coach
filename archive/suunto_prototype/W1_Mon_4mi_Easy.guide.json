@@ -1,0 +1,43 @@
+{
+  "type": "sequence",
+  "name": "W1 Mon 4mi Easy",
+  "description": "4mi Easy \u2014 Week 1 Mon. From timely's MCM 2026 plan.",
+  "shortDescription": "MCM26 W1",
+  "owner": "timely",
+  "url": "https://github.com/",
+  "activities": [
+    1
+  ],
+  "usage": "workout",
+  "steps": [
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 6437.36,
+          "title": "To go"
+        },
+        {
+          "type": "pace",
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 6437.36
+          }
+        }
+      ],
+      "title": "Easy \u2014",
+      "notification": {
+        "title": "Easy \u2014",
+        "text": "Easy \u2014 conversational"
+      }
+    }
+  ],
+  "localDate": "2026-06-15",
+  "externalId": "timely-w1-mon"
+}

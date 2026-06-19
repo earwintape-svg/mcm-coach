@@ -1,0 +1,45 @@
+{
+  "type": "sequence",
+  "name": "W11 Sat 20mi LR",
+  "description": "20mi LR \u2014 Week 11 Sat. From timely's MCM 2026 plan.",
+  "shortDescription": "MCM26 W11",
+  "owner": "timely",
+  "url": "https://github.com/",
+  "activities": [
+    1
+  ],
+  "usage": "workout",
+  "steps": [
+    {
+      "type": "fields",
+      "fields": [
+        {
+          "type": "stepDistanceCountdown",
+          "value": 32186.8,
+          "title": "To go"
+        },
+        {
+          "type": "targetPace",
+          "min": 2.823,
+          "max": 3.065,
+          "title": "Pace"
+        }
+      ],
+      "transitions": [
+        {
+          "condition": {
+            "type": "stepDistance",
+            "value": 32186.8
+          }
+        }
+      ],
+      "title": "Long run \u2014",
+      "notification": {
+        "title": "Long run \u2014",
+        "text": "Long run \u2014 steady"
+      }
+    }
+  ],
+  "localDate": "2026-08-29",
+  "externalId": "timely-w11-sat"
+}
