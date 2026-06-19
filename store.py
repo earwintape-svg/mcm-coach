@@ -108,6 +108,68 @@ def _conn():
     return c
 
 
+# ---------------------------------------------------------------------------
+# Versioned migrations (T7). Each entry runs at most once per database,
+# in order, gated by a schema_version counter stored in kv. Previously this
+# was a `try: ALTER ... except OperationalError: pass` plus a single ad-hoc
+# kv flag ('rpe_scale') -- idempotent by accident (ALTER on an existing
+# column silently no-ops; re-running the RPE rescale would NOT have been
+# safe, which is exactly why it was flag-gated in the first place). Add new
+# migrations by appending a function here -- never edit a past one, even to
+# "improve" it, since its job is to describe what already-deployed
+# databases need, not what the schema should look like today.
+# ---------------------------------------------------------------------------
+
+def _migrate_001_gear_v2(c):
+    """Add brand/model/is_default to gear (additive; 'name' is the id,
+    'display' is the nickname, threshold_mi is the max mileage)."""
+    for col in ("brand TEXT", "model TEXT", "is_default INTEGER DEFAULT 0"):
+        try:
+            c.execute("ALTER TABLE gear ADD COLUMN " + col)
+        except sqlite3.OperationalError:
+            pass  # column already exists -- fine, this migration is also
+                   # reachable from a pre-schema_version database (see
+                   # _current_version's legacy detection below)
+
+
+def _migrate_002_rpe_scale_and_shoes_normalize(c):
+    """RPE 1-5 -> 1-10 scale; shoes free text -> lowercased/trimmed gear
+    keys. NOT safely re-runnable on its own (doubling an already-doubled
+    RPE corrupts it) -- that's the whole reason this needs version gating
+    rather than the old "if flag absent" check working by luck."""
+    c.execute("UPDATE annotations SET rpe = MIN(10, rpe*2) WHERE rpe IS NOT NULL")
+    c.execute("UPDATE annotations SET shoes = lower(trim(shoes)) WHERE shoes IS NOT NULL")
+
+
+MIGRATIONS = [_migrate_001_gear_v2, _migrate_002_rpe_scale_and_shoes_normalize]
+
+
+def _current_version(c):
+    """Returns the schema_version already applied, seeding it on first run.
+
+    Databases created before this migration system existed never wrote a
+    schema_version row, so a fresh read would look like version 0 and
+    re-run every migration -- safe for #1 (idempotent ALTER) but NOT for
+    #2 (would re-double an already-converted RPE). Detect their actual
+    state from the data itself instead of assuming "no row = nothing
+    applied"."""
+    row = c.execute("SELECT v FROM kv WHERE k='schema_version'").fetchone()
+    if row is not None:
+        return int(json.loads(row["v"]))
+    legacy_rpe_done = c.execute(
+        "SELECT 1 FROM kv WHERE k='rpe_scale'").fetchone() is not None
+    gear_cols = {r["name"] for r in c.execute("PRAGMA table_info(gear)")}
+    legacy_gear_done = {"brand", "model", "is_default"} <= gear_cols
+    version = 2 if legacy_rpe_done else (1 if legacy_gear_done else 0)
+    _set_version(c, version)
+    return version
+
+
+def _set_version(c, version):
+    c.execute("INSERT OR REPLACE INTO kv VALUES('schema_version', ?, ?)",
+              (json.dumps(version), time.time()))
+
+
 def init():
     global _ready
     with _lock:
@@ -115,28 +177,20 @@ def init():
             return
         with _conn() as c:
             c.executescript(SCHEMA)
-            # gear v2: brand/model/is_default (additive migration; 'name' is
-            # the id, 'display' is the nickname, threshold_mi = max mileage)
-            for col in ("brand TEXT", "model TEXT", "is_default INTEGER DEFAULT 0"):
-                try:
-                    c.execute("ALTER TABLE gear ADD COLUMN " + col)
-                except sqlite3.OperationalError:
-                    pass
-            # seed the rotation (no-op if already present)
+            version = _current_version(c)
+            for i, migrate in enumerate(MIGRATIONS, start=1):
+                if version < i:
+                    migrate(c)
+                    version = i
+                    _set_version(c, version)
+            # Idempotent data seeding -- safe to run every time (INSERT OR
+            # IGNORE), so it isn't a versioned migration.
             c.execute("INSERT OR IGNORE INTO gear"
                       "(name, display, start_mi, threshold_mi, retired, brand, model, is_default)"
                       " VALUES('asics gel nimbus 27','Nimbus 27',0,400,0,'Asics','Gel Nimbus 27',1)")
             c.execute("INSERT OR IGNORE INTO gear"
                       "(name, display, start_mi, threshold_mi, retired, brand, model, is_default)"
                       " VALUES('asics superblast','Superblast',0,400,0,'Asics','Superblast',0)")
-            # one-time migrations: RPE 1-5 → 1-10, shoes strings → gear ids
-            if c.execute("SELECT v FROM kv WHERE k='rpe_scale'").fetchone() is None:
-                c.execute("UPDATE annotations SET rpe = MIN(10, rpe*2)"
-                          " WHERE rpe IS NOT NULL")
-                c.execute("UPDATE annotations SET shoes = lower(trim(shoes))"
-                          " WHERE shoes IS NOT NULL")
-                c.execute("INSERT OR REPLACE INTO kv VALUES('rpe_scale','10',?)",
-                          (time.time(),))
         _ready = True
 
 
