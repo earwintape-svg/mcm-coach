@@ -70,7 +70,7 @@ async function load(force){
   jget('/api/coach').then(j=>{S.props=(j.proposals||[]);render();}).catch(()=>{});
   jget('/api/other_activities').then(j=>{S.otherActs=j.activities||[];render();}).catch(()=>{});
   jget('/api/prs').then(j=>{S.prs=j;render();}).catch(()=>{});
- }catch(e){toast('Couldn’t reach Garmin: '+e.message,{err:1});}
+ }catch(e){toast('Couldn’t reach Garmin: '+escapeHTML(e.message),{err:1});}
 }
 function nav(d){S.month+=d;render();}
 
@@ -81,7 +81,7 @@ async function syncCalendar(){
   const r=await jpost('/api/sync_calendar',{});
   toast(`Calendar synced — ${r.created} added, ${r.updated} updated, ${r.deleted} removed`);
  }catch(e){
-  toast(e.message,{err:1,sticky:true});
+  toast(escapeHTML(e.message),{err:1,sticky:true});
  }finally{
   if(btn){btn.disabled=false;btn.textContent='📅 Sync to Calendar';}
  }
@@ -180,7 +180,7 @@ function renderPlanList(today){
     parse(it.date).toLocaleDateString(undefined,{weekday:'short',day:'numeric'})+'</span>'+
    '<span style="width:9px;height:9px;border-radius:5px;flex:none;background:var(--'+kindVar[kind(it.title)]+')"></span>'+
    '<b style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
-    it.title.replace(/^W\d+ \w+ /,'')+'</b>'+
+    escapeHTML(it.title.replace(/^W\d+ \w+ /,''))+'</b>'+
    '<span style="color:var(--dim);font-size:12.5px">'+(S.plan.planMiles[it.title]||'?')+' mi</span>'+
    status+'</div>';
  });
@@ -271,7 +271,7 @@ function renderActs(){
   const a=it?assess(it):null;
   const col=a?(a.distOk&&a.paceOk!==false?'var(--good)':'var(--tempo)'):'var(--dim)';
   const isPR=prAids.has(String(r.activityId));
-  h+='<div onclick="openRun(\''+r.activityId+'\',\''+(it?it.title:'')+'\')"'+
+  h+='<div onclick="openRun(\''+r.activityId+'\',\''+(it?it.title.replace(/'/g,''):'')+'\')"'+
    ' style="display:flex;gap:11px;align-items:center;padding:10px 0;border-top:1px solid var(--line);cursor:pointer">'+
    '<div style="width:9px;height:9px;border-radius:5px;flex:none;background:var(--'+
      (it?kindVar[kind(it.title)]:'easy')+')"></div>'+
@@ -359,7 +359,7 @@ async function applyCoach(){
    workoutId:p.workoutId,to:p.to});
   toast(p.action==='move'?'Rescheduled — sync your watch':'Absorbed. Eyes forward.');
   S.props=[];load(true);
- }catch(e){toast('Apply failed: '+e.message,{err:1});}
+ }catch(e){toast('Apply failed: '+escapeHTML(e.message),{err:1});}
 }
 
 function renderReview(){
@@ -512,7 +512,7 @@ async function quickLogRpe(aid,rpe){
   document.getElementById('quicklogpanel').style.display='none';
   toast('Logged '+rpe+' · '+rpeName(rpe)+(shoes?' + shoes':''));
   jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{render();});
- }catch(e){toast('Save failed: '+e.message,{err:1});}
+ }catch(e){toast('Save failed: '+escapeHTML(e.message),{err:1});}
 }
 
 function renderPRs(){
@@ -571,7 +571,7 @@ function renderBrief(today){
   const done=runs.length>0;
   br.style.setProperty('--bcolor','var(--'+kindVar[kind(item.title)]+')');
   h='<div class="top"><div style="flex:1;min-width:0">'+
-   '<b>'+item.title.replace(/^W\d+ \w+ /,'')+'</b>'+
+   '<b>'+escapeHTML(item.title.replace(/^W\d+ \w+ /,''))+'</b>'+
    '<div class="sub">'+rel+' · '+(S.plan.planMiles[item.title]||'?')+' mi · '+estRange(item.title)+
    (t?' · '+t.label:'')+'</div></div>'+
    (done?'<span class="donechip">✓ '+(bigRun?bigRun.mi.toFixed(1)+' mi':'Done')+'</span>':wx)+'</div>';
@@ -603,7 +603,7 @@ function renderBrief(today){
  const needsLog=bigRun&&!((S.ann||{})[String(bigRun.activityId)]||{}).rpe;
  h+='<div class="cta">'+
   (item?'<button onclick="openDetail('+item.scheduleId+')">Details</button>':'')+
-  (bigRun?'<button '+(needsLog?'class="primary" ':'')+'onclick="openRun(\''+bigRun.activityId+'\',\''+(item?item.title:'')+'\')">'+
+  (bigRun?'<button '+(needsLog?'class="primary" ':'')+'onclick="openRun(\''+bigRun.activityId+'\',\''+(item?item.title.replace(/'/g,''):'')+'\')">'+
     (needsLog?'Log how it felt ▸':'View run ▸')+'</button>':'')+
   '</div>';
  br.innerHTML=h;br.style.display='block';
@@ -638,7 +638,7 @@ async function bannerMove(scheduleId,workoutId,fromDate){
   toast('Moved to '+(s.toLabel||s.to));
   const d=await jget('/api/data');
   S.plan=d.plan;S.schedule=d.schedule;render();
- }catch(e){toast('Move failed: '+e.message,{err:1});}
+ }catch(e){toast('Move failed: '+escapeHTML(e.message),{err:1});}
 }
 function bannerDismiss(){
  S.bannerDismissed=true;
@@ -669,12 +669,12 @@ function renderGrid(today){
   (byDate[ds]||[]).forEach(it=>{
    const prev=fmt(new Date(d.getTime()-DAY)),nxt=fmt(new Date(d.getTime()+DAY));
    const clash=isHard(it.title)&&(hardDates.has(prev)||hardDates.has(nxt));
-   const short=it.title.replace(/^W\d+ \w+ /,'');
+   const short=escapeHTML(it.title.replace(/^W\d+ \w+ /,''));
    html+='<div class="chip '+kind(it.title)+(it.date<today?' past':'')+'" draggable="true"'+
     ' id="c'+it.scheduleId+'" data-sid="'+it.scheduleId+'"'+
     ' ondragstart="dragStart(event)" ondragend="dragEnd(event)"'+
     ' onclick="chipTap(event,'+it.scheduleId+')"'+
-    ' title="'+it.title+' — tap for details">'+short+
+    ' title="'+escapeHTML(it.title)+' — tap for details">'+short+
     '<span class="mi">'+(S.plan.planMiles[it.title]||'?')+' mi</span>'+
     (clash?'<span class="warn" title="Back-to-back hard days">⚠️</span>':'')+'</div>';
   });
@@ -730,7 +730,7 @@ function renderWeek(today){
    'padding:6px 0;border-top:1px solid var(--line);cursor:pointer;flex-wrap:wrap">'+
    '<span style="width:84px;color:var(--dim);flex:none">'+
      parse(it.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'</span>'+
-   '<b style="flex:1;min-width:120px">'+it.title.replace(/^W\d+ \w+ /,'')+'</b>'+
+   '<b style="flex:1;min-width:120px">'+escapeHTML(it.title.replace(/^W\d+ \w+ /,''))+'</b>'+
    '<span style="color:var(--dim)">'+(S.plan.planMiles[it.title]||'?')+' mi'+(t?' · '+t.label:'')+'</span>'+
    '<span style="color:'+color+'">'+status+'</span></div>';
  });
@@ -801,7 +801,7 @@ function enterMoveMode(sid){
  if(S.planMode!=='month'){S.planMode='month';render();}  // moving needs the grid
  S.moveItem=it;
  document.body.classList.add('movemode');
- toast('Tap a day to move <b>'+it.title.replace(/^W\d+ \w+ /,'')+'</b>',{sticky:1,cancel:1});
+ toast('Tap a day to move <b>'+escapeHTML(it.title.replace(/^W\d+ \w+ /,''))+'</b>',{sticky:1,cancel:1});
 }
 function exitMoveMode(){
  S.moveItem=null;document.body.classList.remove('movemode');hideToast();
@@ -812,12 +812,12 @@ function applyMove(it,newDate,allowUndo){
  jpost('/api/move',{scheduleId:it.scheduleId,workoutId:it.workoutId,date:newDate})
   .then(()=>{
    if(allowUndo){S.undo={it:it,back:old};
-    toast('<b>'+it.title.replace(/^W\d+ \w+ /,'')+'</b>&nbsp;→ '+
+    toast('<b>'+escapeHTML(it.title.replace(/^W\d+ \w+ /,''))+'</b>&nbsp;→ '+
      parse(newDate).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}),
      {undo:1});}
    load(true);
   })
-  .catch(err=>{it.date=old;render();toast('Move failed — put it back. '+err.message,{err:1});});
+  .catch(err=>{it.date=old;render();toast('Move failed — put it back. '+escapeHTML(err.message),{err:1});});
 }
 function doUndo(){
  if(!S.undo)return;
@@ -830,7 +830,7 @@ function openDetail(sid){
  const it=S.schedule.find(i=>String(i.scheduleId)===String(sid));
  if(!it)return;
  const t=S.plan.planTargets[it.title],a=assess(it),isRepeat=/\dx/.test(it.title);
- let h='<h3>'+it.title+'</h3><p>'+
+ let h='<h3>'+escapeHTML(it.title)+'</h3><p>'+
    parse(it.date).toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})+'</p>'+
    '<div class="preview" style="margin-top:0">'+
    '<b>Plan:</b> '+(S.plan.planMiles[it.title]||'?')+' mi'+
@@ -883,7 +883,7 @@ function openReplan(sid){
   }
  }
  const recLabel=recDate?parse(recDate).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'}):null;
- let h='<h3>Replan: '+it.title.replace(/^W\d+ \w+ /,'')+'</h3>'+
+ let h='<h3>Replan: '+escapeHTML(it.title.replace(/^W\d+ \w+ /,''))+'</h3>'+
   '<p>Missed on '+parse(it.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'.</p>'+
   '<div class="preview" style="margin-top:0">'+
   (hard?
@@ -909,7 +909,7 @@ async function applyReplan(sid,act,dateStr){
   else await jpost('/api/unschedule',{scheduleId:it.scheduleId});
   toast(act==='move'?'Rescheduled — sync your watch':'Absorbed. Eyes forward.');
   load(true);
- }catch(e){toast('Replan failed: '+e.message,{err:1});}
+ }catch(e){toast('Replan failed: '+escapeHTML(e.message),{err:1});}
 }
 
 /* ---------------- run detail sheet ---------------- */
@@ -931,7 +931,7 @@ async function openRun(aid,title){
  document.getElementById('rscrim').classList.add('show');
  let j;
  try{j=await jget('/api/run/'+aid);}
- catch(e){m.innerHTML='<h3>Couldn’t load run</h3><p>'+e.message+
+ catch(e){m.innerHTML='<h3>Couldn’t load run</h3><p>'+escapeHTML(e.message)+
   '</p><div class="row"><button onclick="closeRun()">Close</button></div>';return;}
  renderRun(j,title?S.plan.planTargets[title]:null,title);
 }
@@ -1262,7 +1262,7 @@ async function saveAnn(close){
   toast('Logged — this is your data now');
   if(close)closeRun();
   jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{render();});
- }catch(e){toast('Save failed: '+e.message,{err:1});}
+ }catch(e){toast('Save failed: '+escapeHTML(e.message),{err:1});}
 }
 
 function gearEdit(key){
@@ -1297,7 +1297,7 @@ async function gearSave(key,retire,makeDefault){
   closeDetail();toast(retire?'Retired — thanks for the miles':
    (makeDefault?'Default trainer set':'Gear updated'));
   const j=await jget('/api/gear');S.gear=j.gear||[];render();
- }catch(e){toast('Gear save failed: '+e.message,{err:1});}
+ }catch(e){toast('Gear save failed: '+escapeHTML(e.message),{err:1});}
 }
 
 /* ---------------- vacation mode: plan around it ---------------- */
@@ -1350,9 +1350,9 @@ function previewVacation(){
  if(!acts.length){pv.textContent='No workouts in that range — enjoy the trip.';go.disabled=true;return;}
  VPLAN={from:f,to:t,actions:acts};
  pv.innerHTML=acts.map(a=>{
-  const name=a.it.title.replace(/^W\d+ /,'');
+  const name=escapeHTML(a.it.title.replace(/^W\d+ /,''));
   if(a.act==='skip')
-   return '<span style="color:var(--faint)">skip</span> '+name+(a.why?' <span style="color:var(--faint)">('+a.why+')</span>':'');
+   return '<span style="color:var(--faint)">skip</span> '+name+(a.why?' <span style="color:var(--faint)">('+escapeHTML(a.why)+')</span>':'');
   return '<span style="color:var(--accent)">move</span> '+name+' → <b>'+
    parse(a.to).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+'</b>';
  }).join('<br>');
@@ -1374,7 +1374,7 @@ async function doVacation(){
   }
   toast('Done — plan adjusted around your vacation. Sync your watch.');
   load(true);
- }catch(e){toast('Vacation plan failed partway: '+e.message+' — hit Refresh to see current state.',{err:1});load(true);}
+ }catch(e){toast('Vacation plan failed partway: '+escapeHTML(e.message)+' — hit Refresh to see current state.',{err:1});load(true);}
 }
 
 try{setView(localStorage.getItem('coachView')||'today');}catch(e){setView('today');}

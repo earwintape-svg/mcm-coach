@@ -113,9 +113,15 @@ frontend* and published on GitHub Pages.
   tab bar on mobile, run analysis with scrub-synced charts + route dot +
   split/range selection + pace-colored route + HR zones. The
   apple-touch-icon is a PNG rasterized at runtime in pure stdlib (now in
-  `main.py`). XSS risk from unescaped user-text interpolation (notes,
-  gear names) is still open — see weakness #4 and backlog T8; not yet
-  re-verified against the current `app.js` this round.
+  `main.py`). XSS audit (T8, 2026-06-19): an `escapeHTML()` helper already
+  existed and covered most user-text interpolation (notes, gear/shoe
+  names), but the calendar grid and week-report views — the most-viewed,
+  most third-party-exposed surfaces — interpolated Garmin/Runna workout
+  titles raw, including inside an HTML attribute. Fixed; see
+  `tests/test_frontend_escaping.py`. Three sites pass a title through a
+  single-quoted JS string inside an `onclick` attribute instead — that
+  context needs quote-stripping, not HTML-escaping, since the browser
+  HTML-decodes the attribute before the inline handler is JS-parsed.
 
 ### Publish + ops
 - **`make_demo.py`** — builds `docs/index.html` + `docs/apple-touch-icon.png`
