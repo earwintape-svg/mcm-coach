@@ -66,6 +66,9 @@
  .banner{border-radius:12px;padding:10px 15px;margin-bottom:14px;font-size:13.5px;display:none}
  .banner.amber{display:block;background:#2c2410;border:1px solid #4d3f1c;color:#f0d28a}
  .banner.red{display:block;background:#2d1515;border:1px solid #553030;color:#f3a9a0}
+ .rpe-btn{flex:1;padding:11px 0;background:var(--cell);border:1px solid var(--line);
+  border-radius:8px;color:var(--dim);font-size:13px;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+ .rpe-btn:hover,.rpe-btn:active{background:#1e2a3a;border-color:var(--accent);color:var(--tx)}
 
  .bar{display:flex;align-items:center;gap:9px;margin-bottom:12px;flex-wrap:wrap}
  .mnav{display:flex;align-items:center;gap:2px;background:var(--panel);
@@ -141,6 +144,10 @@
  .lapbars .b{flex:1;background:var(--good);border-radius:3px 3px 0 0;min-width:3px;opacity:.92;position:relative;z-index:1}
  .lapbars .tband{position:absolute;left:0;right:0;background:rgba(255,255,255,.14);border-radius:3px;z-index:0}
  .chartwrap{position:relative;touch-action:pan-y;overscroll-behavior-x:none;cursor:crosshair}
+ .playhead{position:absolute;top:0;bottom:18px;left:50%;width:1px;background:var(--faint);
+  pointer-events:none;animation:phPulse 2s ease-in-out infinite}
+ .playhead.gone{display:none}
+ @keyframes phPulse{0%,100%{opacity:.15}50%{opacity:.65}}
  .chartwrap svg{display:block;margin-bottom:6px}
  .ctip{position:absolute;background:#222b36;border:1px solid var(--line);border-radius:8px;
   padding:5px 9px;font-size:11.5px;white-space:nowrap;pointer-events:none;display:none;
@@ -223,10 +230,13 @@
  <div class="wstrip" id="wstrip"></div>
  <div class="brief" id="reviewcard" style="display:none;--bcolor:var(--accent)"></div>
  <div class="brief" id="coachcard" style="display:none;--bcolor:var(--accent2)"></div>
+ <div class="panel" id="countdownpanel" style="display:none"></div>
  <div class="banner" id="banner"></div>
  <div class="brief" id="brief" style="display:none"></div>
+ <div class="panel" id="quicklogpanel" style="display:none"></div>
  <div class="panel" id="weekpanel" style="display:none"></div>
  <div class="panel" id="trendpanel" style="display:none"></div>
+ <div class="panel" id="fitformpanel" style="display:none"></div>
  </div>
 
  <div id="v-plan" style="display:none">
@@ -241,6 +251,7 @@
      <button class="ghost" onclick="nav(1)">›</button>
    </div>
    <button onclick="openVacation()">Vacation</button>
+   <button onclick="syncCalendar()" id="syncCalBtn">📅 Sync to Calendar</button>
    <button onclick="load(true)" aria-label="refresh">↻</button>
    <div class="legend">
      <span><i style="background:var(--easy)"></i>Easy</span>
@@ -263,7 +274,9 @@
  </div>
 
  <div id="v-acts" style="display:none">
+ <div class="panel" id="prpanel" style="display:none"></div>
  <div class="panel" id="actpanel"><h3>Activities</h3></div>
+ <div class="panel" id="otheractpanel" style="display:none"></div>
  </div>
 
  <div class="scrim" id="scrim">

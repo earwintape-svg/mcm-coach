@@ -20,7 +20,16 @@ APPDIR="$HOME/Library/Application Support/MCMCoach"
 
 sync_app() {
   mkdir -p "$APPDIR"
-  cp coach.py plan.py builders.py upload_garmin_workouts.py store.py ui.html app.js "$APPDIR/"
+  # Core files
+  cp coach.py main.py plan.py builders.py upload_garmin_workouts.py store.py \
+     ui.html app.js intervalsicu_read.py requirements.txt "$APPDIR/"
+  # src/ package (services + api)
+  cp -r src "$APPDIR/"
+  # Secrets
+  [ -f .intervals_key ] && cp .intervals_key "$APPDIR/"
+  [ -f .env ] && cp .env "$APPDIR/"
+  # Ensure dependencies are installed for the app's Python
+  "$PY" -m pip install -r "$APPDIR/requirements.txt" --quiet --break-system-packages 2>/dev/null || true
 }
 
 make_plist() {

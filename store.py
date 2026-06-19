@@ -91,6 +91,12 @@ CREATE TABLE IF NOT EXISTS gear(
   threshold_mi REAL DEFAULT 400,
   retired INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS gcal_events(
+  schedule_id TEXT PRIMARY KEY,
+  event_id TEXT NOT NULL,
+  fingerprint TEXT,
+  synced_at REAL
+);
 """
 
 
@@ -358,6 +364,28 @@ def get_kv(k):
     if row is None:
         return None, None
     return json.loads(row["v"]), time.time() - row["updated_at"]
+
+
+def get_gcal_map():
+    """scheduleId (str) -> {eventId, fingerprint} for every synced workout."""
+    init()
+    with _lock, _conn() as c:
+        rows = c.execute("SELECT * FROM gcal_events").fetchall()
+    return {r["schedule_id"]: {"eventId": r["event_id"],
+                                "fingerprint": r["fingerprint"]} for r in rows}
+
+
+def set_gcal_event(schedule_id, event_id, fingerprint):
+    init()
+    with _lock, _conn() as c:
+        c.execute("INSERT OR REPLACE INTO gcal_events VALUES(?,?,?,?)",
+                  (str(schedule_id), event_id, fingerprint, time.time()))
+
+
+def delete_gcal_event(schedule_id):
+    init()
+    with _lock, _conn() as c:
+        c.execute("DELETE FROM gcal_events WHERE schedule_id=?", (str(schedule_id),))
 
 
 def backup(dest_dir):
