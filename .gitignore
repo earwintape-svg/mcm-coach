@@ -1,6 +1,7 @@
 .garmin_tokens/
 *.token
 .env
+client_secret*.json
 pre_force_backup_*.json
 pre_delete_backup_*.json
 workout_*.json
@@ -15,3 +16,6 @@ __pycache__/
 timely-backup.db
 timely.db*
 .ship_request
+.intervals_request
+.intervals_response.txt
+.intervals_key
