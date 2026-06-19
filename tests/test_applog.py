@@ -44,7 +44,7 @@ class TestRequestLogging:
         with caplog.at_level(logging.INFO, logger="timely.http"):
             client.get("/app.js")
         lines = [r.getMessage() for r in caplog.records]
-        assert any("GET" in l and "/app.js" in l for l in lines)
+        assert any("GET" in line and "/app.js" in line for line in lines)
 
     def test_4xx_response_logged_at_warning(self, caplog):
         client = TestClient(main.app)

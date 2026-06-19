@@ -1,7 +1,7 @@
 """Schedule service — fetch, move, and cache the Garmin workout calendar."""
 from __future__ import annotations
+import re
 import threading
-import time
 from datetime import date, timedelta
 from typing import Optional
 
@@ -103,8 +103,7 @@ def next_clean_slot(sched: list, exclude_id: int, from_day: date,
     return None
 
 
-import re as _re
-_HARD_RE = _re.compile(r"Tempo|Hill|\dx|MP Finish|mi LR")
+_HARD_RE = re.compile(r"Tempo|Hill|\dx|MP Finish|mi LR")
 
 
 def _is_hard(title: str) -> bool:

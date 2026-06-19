@@ -9,7 +9,6 @@ row-count sanity checks (using the isolated_store fixture from conftest.py,
 so this never touches the real database).
 """
 import os
-import sqlite3
 import time
 
 import pytest

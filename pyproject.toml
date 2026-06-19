@@ -26,7 +26,7 @@ dependencies = [
 # actually requires -- if a different pinned fastapi/starlette version
 # wants a different test-client package, pytest's collection error names
 # it explicitly; swap accordingly.
-dev = ["pytest>=7.0,<10.0", "httpx2"]
+dev = ["pytest>=7.0,<10.0", "httpx2", "ruff>=0.6,<1.0", "detect-secrets>=1.5,<2.0"]
 
 # The repo predates packaging: most modules are flat files at the root
 # (builders.py, plan.py, store.py, main.py, ...) rather than nested under
@@ -47,3 +47,19 @@ include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# G6: ruff does both linting and formatting -- one tool instead of the
+# brief's suggested ruff+black combo, since ruff's own formatter has
+# covered black's job since ~0.1 and a second tool/config to keep in sync
+# isn't worth it for a single-user repo. Pinned to py39 because that's
+# what's actually deployed (see the 3.9 note in ARCHITECTURE.md) -- ruff
+# needs to see what prod sees, same reasoning as the CI Python pin.
+[tool.ruff]
+target-version = "py39"
+extend-exclude = ["archive"]  # frozen reference, see AGENTS.md -- not ours to reformat
+
+[tool.ruff.lint]
+# Default rule set (E/F) is enough here: unused imports/vars and basic
+# style. Not reaching for ruff's stricter rule families (B, UP, SIM, ...)
+# in one pass -- that's a separate, larger-diff decision for later, not
+# bundled into "stand up the tool."

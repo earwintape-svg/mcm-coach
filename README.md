@@ -80,11 +80,14 @@ The full UI on a synthetic athlete (mid-week-6: on-target runs, one missed day, 
 - Tokens live in `~/.garmin_tokens` (outside the repo); password entry uses `getpass`, never logged. The `.gitignore` blocks tokens, backups, fetched workout JSON, the intervals.icu key (`.intervals_key`), and the Google OAuth `client_secret*.json` from commits. `~/.gcal_token.json` (Calendar OAuth) lives outside the repo entirely, like the Garmin tokens.
 - `--lan` mode requires a per-session secret (`?key=…` printed in Terminal); localhost is always allowed. Without the key, other devices on your Wi-Fi get 403.
 - This app uses Garmin's unofficial consumer API via your own login — fine for personal use, not a basis for hosting other people's accounts. A multi-user product would need Garmin's official Connect Developer Program (OAuth) and a real backend.
+- A git pre-commit hook (`hooks/pre-commit`, wired via `core.hooksPath=hooks` — runs automatically, no setup needed) scans staged changes with `detect-secrets` before every commit, so a secret-shaped string gets caught locally instead of relying on a human noticing (the `client_secret.json` near-miss this session is exactly the class of mistake this closes). The same scan is a hard gate in CI, so it can't be skipped by not having the tool installed locally.
 
 ## Tests
 
 ```bash
-python3 -m pytest -q    # 76 tests, no network
+python3 -m pip install -e ".[dev]"   # pytest, ruff, detect-secrets
+python3 -m pytest -q                  # 106 tests, no network
+ruff check .                          # lint
 ```
 
 `tests/test_builders.py` covers what `test_upload_garmin.py` used to (now

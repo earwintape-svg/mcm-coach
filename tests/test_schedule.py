@@ -1,5 +1,4 @@
 """Tests for schedule logic — particularly _next_clean_slot invariants."""
-import pytest
 from datetime import date
 from src.services.schedule import next_clean_slot, _is_hard
 

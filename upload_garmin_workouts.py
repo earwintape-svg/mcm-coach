@@ -27,7 +27,7 @@ import time
 from datetime import date, datetime
 
 from plan import build_plan, PLAN_START
-from builders import total_distance_m, MILE
+from builders import total_distance_m
 
 TOKEN_DIR = os.path.expanduser("~/.garmin_tokens")
 # Anchored: matches only "W<1-19> <plan day> ..." — never "Weekly Run",

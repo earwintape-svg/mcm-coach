@@ -142,7 +142,6 @@ def fetch_run_detail(activity_id) -> dict:
 def fetch_other_activities(force: bool = False) -> list:
     """Non-running activities for the multi-sport view."""
     from src.services import cache as _cache
-    import time
     if not force and _cache.get("other") is not None and _cache.fresh("other_ts", 1800):
         return _cache.get("other")
     out = []

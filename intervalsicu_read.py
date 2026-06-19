@@ -195,7 +195,6 @@ def fetch_activity_detail(activity_id):
         laps = []
         for iv in ivs:
             # Filter to effort intervals only (skip recovery, warmup, cooldown)
-            label = (iv.get("label") or iv.get("name") or "").lower()
             typ = (iv.get("type") or "").lower()
             if typ in ("recovery", "warmup", "cooldown", "rest"):
                 continue

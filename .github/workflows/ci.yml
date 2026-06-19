@@ -35,3 +35,19 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+      # G5: the real gate -- hooks/pre-commit runs the same scan locally
+      # but soft-fails if detect-secrets isn't installed (not every clone
+      # has run `pip install -e .[dev]`). This step can't be skipped.
+      - name: Secret scan (detect-secrets)
+        run: detect-secrets-hook --baseline .secrets.baseline $(git ls-files | grep -v '^archive/')
+
+      # G6: same split as hooks/pre-commit -- lint is a real gate (passes
+      # clean today), format is informational only until a deliberate
+      # one-time `ruff format .` pass lands (see hooks/pre-commit for why
+      # that's not bundled into this commit).
+      - name: Lint (ruff check)
+        run: ruff check .
+
+      - name: Format check (informational, not a gate yet)
+        run: ruff format --check . || true

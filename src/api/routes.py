@@ -7,13 +7,10 @@ from __future__ import annotations
 import hmac
 import os
 import re
-import struct
-import zlib
 from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, Response
 
 from src.services.plan_svc import plan_summary
 from src.services.schedule import (fetch_schedule, move_workout,

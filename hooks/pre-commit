@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Block direct commits to main. Agents work on a branch and open a PR so the
-# infra/product work is reviewable before it lands. See AGENTS.md.
-# Deliberate bootstrap only: git commit --no-verify
+# See AGENTS.md. Deliberate bootstrap-only override: git commit --no-verify
+set -e
+
+# --- 1. Block direct commits to main -----------------------------------
+# Agents work on a branch and open a PR so the infra/product work is
+# reviewable before it lands.
 branch=$(git symbolic-ref --short HEAD 2>/dev/null)
 if [ "$branch" = "main" ]; then
   echo "✋ Direct commits to 'main' are blocked (AGENTS.md › Parallel agents)."
@@ -9,4 +12,57 @@ if [ "$branch" = "main" ]; then
   echo "   then push and open a PR — CI + review gate main."
   exit 1
 fi
+
+staged_py=$(git diff --cached --name-only --diff-filter=ACM -- '*.py' ':!archive/*')
+
+# --- 2. Secret scanning (G5) --------------------------------------------
+# Would have caught the client_secret.json near-miss automatically instead
+# of relying on a human noticing. Soft-fails (warns, doesn't block) if the
+# tool isn't installed locally -- this repo's own dev hasn't necessarily
+# run `pip install -e .[dev]` in every clone -- but the same check is a
+# hard gate in CI (.github/workflows/ci.yml), so it can't be skipped by
+# just not installing the tool.
+if command -v detect-secrets >/dev/null 2>&1; then
+  if ! detect-secrets-hook --baseline .secrets.baseline \
+        $(git diff --cached --name-only --diff-filter=ACM | grep -v '^archive/'); then
+    echo "✋ Possible secret detected above. If it's a false positive:"
+    echo "   detect-secrets scan --baseline .secrets.baseline"
+    echo "   git add .secrets.baseline"
+    exit 1
+  fi
+else
+  echo "⚠️  detect-secrets not installed locally -- skipping secret scan"
+  echo "   (still enforced in CI). Run: pip install -e .[dev]"
+fi
+
+# --- 3. Lint (G6) --------------------------------------------------------
+# Hard gate: ruff check passes clean on the whole repo today (verified
+# 2026-06-19), so this should never block a real commit, only catch new
+# mistakes (unused imports, undefined names, etc.) going forward.
+if [ -n "$staged_py" ]; then
+  if command -v ruff >/dev/null 2>&1; then
+    ruff check $staged_py || exit 1
+  else
+    echo "⚠️  ruff not installed locally -- skipping lint check"
+    echo "   (still enforced in CI). Run: pip install -e .[dev]"
+  fi
+fi
+
+# --- 4. Format (G6) -- informational only, not a gate, on purpose -------
+# ruff format --check checks a whole file's formatting, not just your
+# diff. The existing codebase (35 files) has never been run through a
+# formatter, so making this a hard gate today would force an unrelated
+# whole-file reformat into the next commit that happens to touch any of
+# them -- exactly the kind of noisy, unreviewable diff this ticket exists
+# to prevent. One deliberate `ruff format .` pass, done on its own branch
+# when the frontend redesign isn't mid-flight (so it doesn't manufacture
+# merge conflicts), should come before this becomes a real gate.
+if [ -n "$staged_py" ] && command -v ruff >/dev/null 2>&1; then
+  unformatted=$(ruff format --check $staged_py 2>&1 | grep '^Would reformat' || true)
+  if [ -n "$unformatted" ]; then
+    echo "ℹ️  Not ruff-formatted (not blocking -- see hooks/pre-commit):"
+    echo "$unformatted"
+  fi
+fi
+
 exit 0

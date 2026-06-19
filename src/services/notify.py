@@ -11,7 +11,7 @@ from src.services.schedule import fetch_schedule
 from src.services.actuals import fetch_actuals
 from src.services.wellness import fetch_wellness
 from src.services.fitness import fetch_fitness, fetch_prs
-from src.services.weather import fetch_weather, heat_pct
+from src.services.weather import fetch_weather
 from src.services.plan_svc import plan_summary
 from src.services.trends import build_week_review
 from src.services.applog import get_logger

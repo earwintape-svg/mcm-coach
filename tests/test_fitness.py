@@ -1,7 +1,5 @@
 """Tests for VDOT math and personal records."""
-import pytest
 from src.services.fitness import _vdot_of, _predict_secs, fetch_prs
-from builders import MILE
 
 
 class TestVdot:

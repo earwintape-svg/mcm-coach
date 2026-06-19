@@ -1,5 +1,4 @@
 """Dynamic coaching engine — rule-based plan adaptation proposals."""
-import re
 from datetime import date, timedelta
 
 import store

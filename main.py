@@ -6,7 +6,6 @@ Via CLI shim:     python3 coach.py [--lan] [--port N] [--no-browser]
 """
 from __future__ import annotations
 import argparse
-import os
 import secrets
 import socket
 import struct
