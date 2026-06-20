@@ -68,7 +68,11 @@ frontend* and published on GitHub Pages.
   `~/.mcm_coach_key`); `store.decrypt_backup()` is the manual-recovery
   path, deliberately needing nothing but that key file and the
   `cryptography` package so recovery doesn't depend on the rest of the
-  app working. `python3
+  app working. `export_all()` (G4) is the opposite of encrypted backups
+  on purpose: plain, unencrypted JSON, one file per table
+  (`EXPORT_TABLES`), openable by anything -- a text editor, a different
+  app, nothing this codebase controls -- if this app or the unofficial
+  Garmin API it rides on ever stops existing. `python3
   main.py verify-backup` runs it on demand. Migrations are versioned
   (`schema_version` + an ordered `MIGRATIONS` list, T7, resolved) — see
   `tests/test_store_migrations.py`.

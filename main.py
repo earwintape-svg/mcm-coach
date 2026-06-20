@@ -188,11 +188,13 @@ def main():
 
     ap = argparse.ArgumentParser(description="MCM Coach — training dashboard")
     ap.add_argument("command", nargs="?",
-                     choices=["serve", "notify", "verify-backup"], default="serve")
+                     choices=["serve", "notify", "verify-backup", "export-all"], default="serve")
     ap.add_argument("--lan", action="store_true", help="listen on Wi-Fi network (key-protected)")
     ap.add_argument("--port", type=int, default=PORT)
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--weekly", action="store_true", help="with notify: send week-in-review")
+    ap.add_argument("--out", default=None,
+                     help="with export-all: output directory (default: ./timely-export-YYYY-MM-DD)")
     args = ap.parse_args()
 
     if args.command == "notify":
@@ -212,6 +214,19 @@ def main():
             print("BACKUP VERIFICATION FAILED: %s" % e)
             sys.exit(1)
         print("Backup OK — %s" % counts)
+        return
+
+    if args.command == "export-all":
+        # G4: "your proprietary data should never be trapped in a format
+        # only this app reads." Plain JSON, one file per table, no
+        # encryption (deliberately -- meant to be openable by anything).
+        import store
+        from datetime import date
+        out_dir = args.out or ("timely-export-%s" % date.today().isoformat())
+        written = store.export_all(out_dir)
+        print("Exported to %s/:" % out_dir)
+        for table, n in written.items():
+            print("  %-16s %d rows" % (table, n))
         return
 
     host = "0.0.0.0" if args.lan else "127.0.0.1"

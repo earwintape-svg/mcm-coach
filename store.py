@@ -620,3 +620,44 @@ def verify_backup(dest_dir):
             "empty/stale" % live_runs)
 
     return counts
+
+
+# Tables worth exporting for G4. Deliberately wider than the ticket's own
+# list (runs, annotations, gear, wellness, weekly_reviews) -- raw_activities/
+# run_details/schedule_events also hold real proprietary or cached-third-
+# -party data that would otherwise be just as trapped. Left out: `kv`
+# (internal cache/schema-version bookkeeping, not user data) and
+# `gcal_events` (sync plumbing -- a Calendar event ID is meaningless
+# outside this app, nothing to "recover" from it).
+EXPORT_TABLES = (
+    "runs", "annotations", "gear", "wellness", "weekly_reviews",
+    "raw_activities", "run_details", "schedule_events",
+)
+
+
+def export_all(dest_dir):
+    """G4: one-command full export to plain JSON, one file per table --
+    "your proprietary data should never be trapped in a format only this
+    app reads." Deliberately plaintext (not encrypted like backup()/G3):
+    this is meant to be opened by *anything* -- a text editor, a
+    spreadsheet's JSON import, a different app entirely -- if this app or
+    the unofficial Garmin API it depends on ever dies. At-rest protection
+    for routine backups is G3's job, not this one's. Returns {table: row
+    count} so a caller (or a human) can sanity-check nothing came back
+    empty.
+    """
+    init()
+    os.makedirs(dest_dir, exist_ok=True)
+    written = {}
+    with _lock:
+        conn = _conn()
+        try:
+            for table in EXPORT_TABLES:
+                rows = [dict(r) for r in
+                        conn.execute("SELECT * FROM " + table).fetchall()]
+                with open(os.path.join(dest_dir, table + ".json"), "w") as f:
+                    json.dump(rows, f, indent=2, default=str)
+                written[table] = len(rows)
+        finally:
+            conn.close()
+    return written
