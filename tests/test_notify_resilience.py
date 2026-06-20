@@ -163,3 +163,55 @@ class TestRestoreDrillLoop:
 
         assert len(pushes) == 1
         assert "restore_drill" in pushes[0]
+
+
+class TestGarminCanaryLoop:
+    """G11: same kv-gated weekly cadence as TestRestoreDrillLoop above,
+    just against upload_garmin_workouts.garmin_contract_check() instead
+    of store.verify_backup(). garmin_canary_loop() imports
+    garmin_contract_check *inside* the function (lazy, same pattern as
+    get_client()'s lazy garminconnect import elsewhere in this codebase),
+    so it has to be patched on the upload_garmin_workouts module, not on
+    notify's own namespace."""
+
+    def test_runs_immediately_when_never_run_before(self, monkeypatch, _reset_module_state):
+        import store
+        import upload_garmin_workouts as ugw
+        calls = []
+        monkeypatch.setattr(ugw, "garmin_contract_check", lambda deep=True: calls.append(deep))
+        _run_n_then_stop(monkeypatch, 1)
+
+        with pytest.raises(_StopLoop):
+            notify.garmin_canary_loop()
+
+        assert calls == [True]
+        _, age = store.get_kv("last_garmin_canary")
+        assert age is not None and age < 5
+
+    def test_does_not_rerun_within_interval(self, monkeypatch, _reset_module_state):
+        import store
+        import upload_garmin_workouts as ugw
+        calls = []
+        monkeypatch.setattr(ugw, "garmin_contract_check", lambda deep=True: calls.append(deep))
+        store.set_kv("last_garmin_canary", time.time())  # "just ran"
+        _run_n_then_stop(monkeypatch, 3)
+
+        with pytest.raises(_StopLoop):
+            notify.garmin_canary_loop()
+
+        assert calls == []
+
+    def test_failure_surfaces_through_resilient_loop(self, monkeypatch, _reset_module_state):
+        import upload_garmin_workouts as ugw
+        pushes = _reset_module_state
+
+        def _boom(deep=True):
+            raise RuntimeError("Garmin contract check found a mismatch")
+        monkeypatch.setattr(ugw, "garmin_contract_check", _boom)
+        _run_n_then_stop(monkeypatch, 1)
+
+        with pytest.raises(_StopLoop):
+            notify.garmin_canary_loop()
+
+        assert len(pushes) == 1
+        assert "garmin_canary" in pushes[0]

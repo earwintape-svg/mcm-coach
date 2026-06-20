@@ -122,8 +122,14 @@ frontend* and published on GitHub Pages.
   weather 30min; wellness 30min with store fallback when Garmin is down.
 - **Background threads**: DB backup (5-min); run watcher (10-min poll →
   "Run synced" push when a new activity lands); restore drill (G2, hourly
-  tick, gated to run monthly — see Data plane above). All three run
-  through
+  tick, gated to run monthly — see Data plane above); Garmin contract
+  canary (G11, hourly tick, gated to run weekly —
+  `upload_garmin_workouts.garmin_contract_check()`, the same per-workout
+  structure check `verify --deep` always did, just exposed as a function
+  background threads can call instead of only a CLI command a human has
+  to remember to run. Read-only — never uploads/deletes/forces anything.
+  Catches "Garmin changed their schema" as a push notification instead of
+  as a corrupted calendar discovered days later). All four run through
   `_run_resilient_loop` (`src/services/notify.py`, G10, 2026-06-19): a bad
   iteration is still tolerated (the loop never dies), but now every
   exception is logged with a full traceback, the first failure of a streak
@@ -224,8 +230,13 @@ frontend* and published on GitHub Pages.
    upload, scheduling) and the sync read path ride an undocumented
    consumer API via garth. Garmin can change or block it without notice.
    Mitigations: reads degrade to the local store; all Garmin knowledge is
-   concentrated in two files; `golden`/`fetch` exist to re-diff reality.
-   Residual risk: high and irreducible without Garmin's official program.
+   concentrated in two files; `golden`/`fetch` exist to re-diff reality
+   on demand, and (G11, 2026-06-19) `garmin_contract_check()` now does
+   the same `verify --deep` structure check automatically, weekly, with
+   a phone push on drift instead of waiting for a human to think to run
+   `golden` after something already broke. Residual risk: high and
+   irreducible without Garmin's official program — this catches drift
+   sooner, it doesn't remove the dependency.
 2. **Single machine, single point of failure.** The Mac is the cloud. If
    it's asleep, dead, or off Wi-Fi: no app, no pushes, no sync (the watch
    plan keeps working — workouts are already on Garmin). Backups (G1,

@@ -195,6 +195,30 @@ def cmd_verify(args):
     _verify(client, plan, deep=args.deep)
 
 
+def garmin_contract_check(deep=True):
+    """G11: schema-drift canary, the public entry point notify.py's
+    background loop uses. Read-only -- calls only GET (and the same
+    workout-detail GETs `verify --deep` always made); never uploads,
+    deletes, or forces anything, so it's safe to run unattended on a
+    schedule. Returns True if Garmin's stored plan workouts still match
+    what build_plan() expects (present, right name, and with deep=True,
+    no lap.button step degradation / step-count / distance drift).
+    Raises whatever get_client()/api() raises on auth or network
+    failure -- the caller (notify.py's _run_resilient_loop) already
+    knows how to turn an exception into a logged + rate-limited-pushed
+    failure; this only needs to add real-but-not-exceptional "answer
+    was no" as a RuntimeError so that same machinery treats a genuine
+    contract mismatch the same way as a crash.
+    """
+    client = get_client()
+    plan = build_plan()
+    if not _verify(client, plan, deep=deep):
+        raise RuntimeError(
+            "Garmin contract check found a mismatch -- see the log above "
+            "for MISSING/EXTRA/FAIL details")
+    return True
+
+
 def _verify(client, plan, deep):
     remote = remote_plan_workouts(client)
     local_names = {p["name"] for p in plan}
@@ -209,7 +233,13 @@ def _verify(client, plan, deep):
     if not deep:
         return not missing and not extra
 
-    ok = True
+    # NOTE (found while building G11's canary, fixed here rather than
+    # worked around): this used to return True as long as every *present*
+    # workout deep-checked clean, even if `missing`/`extra` above was
+    # non-empty -- a vanished or renamed workout was logged but couldn't
+    # fail the boolean result. Folding it in here matches what the
+    # non-deep branch above already does.
+    ok = not missing and not extra
     by_name = {p["name"]: p for p in plan}
     for i, (name, w) in enumerate(sorted(remote.items()), 1):
         full = api(client, "/workout-service/workout/%s" % w["workoutId"])

@@ -213,3 +213,34 @@ def restore_drill_loop(backup_dir: str):
         store.set_kv("last_restore_drill", time.time())
         log.info("restore_drill: passed (%s)", counts)
     _run_resilient_loop("restore_drill", 3600, _tick)
+
+
+# G11: "the whole write path rides an undocumented API ... instead of
+# discovering it when an upload silently corrupts your calendar." Same
+# kv-gated cadence as restore_drill_loop above: ticks hourly so a restart
+# doesn't push the check out by a full week, but the actual canary --
+# `verify --deep`'s same per-workout structure check, just exposed as a
+# function instead of a CLI command -- only runs once
+# _GARMIN_CANARY_INTERVAL_DAYS have elapsed. Weekly, not daily: this is a
+# 93-workout deep check (one API call per workout, ~0.5s throttled each,
+# so roughly a minute end to end) against a training plan that doesn't
+# change often -- daily would just be burning API calls and rate-limit
+# budget for no extra signal. A genuine mismatch raises (via
+# garmin_contract_check's RuntimeError), which _run_resilient_loop turns
+# into exactly the rotating-log + rate-limited-phone-push treatment every
+# other background failure gets (G10) -- "the day Garmin changes their
+# schema" shows up as a push, not a silently corrupted calendar.
+_GARMIN_CANARY_INTERVAL_DAYS = 7
+
+
+def garmin_canary_loop():
+    from upload_garmin_workouts import garmin_contract_check
+
+    def _tick():
+        _, age_sec = store.get_kv("last_garmin_canary")
+        if age_sec is not None and age_sec < _GARMIN_CANARY_INTERVAL_DAYS * 86400:
+            return
+        garmin_contract_check(deep=True)
+        store.set_kv("last_garmin_canary", time.time())
+        log.info("garmin_canary: passed")
+    _run_resilient_loop("garmin_canary", 3600, _tick)

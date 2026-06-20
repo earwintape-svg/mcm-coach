@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from src.config import PORT, BACKUP_DIR
 from src.api.routes import router, set_access_key
-from src.services.notify import run_watcher, backup_loop, restore_drill_loop
+from src.services.notify import run_watcher, backup_loop, restore_drill_loop, garmin_canary_loop
 from src.services.applog import get_logger
 
 log = get_logger("http")
@@ -121,6 +121,7 @@ async def lifespan(app: FastAPI):
     threading.Thread(target=backup_loop, args=(bd,), daemon=True, name="backup_loop").start()
     threading.Thread(target=run_watcher, daemon=True, name="run_watcher").start()
     threading.Thread(target=restore_drill_loop, args=(bd,), daemon=True, name="restore_drill_loop").start()
+    threading.Thread(target=garmin_canary_loop, daemon=True, name="garmin_canary_loop").start()
     yield
     log.info("shutdown")
 
