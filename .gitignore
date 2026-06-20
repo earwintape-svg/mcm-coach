@@ -25,3 +25,9 @@ intervalsicu_plan/
 .intervals_request
 .intervals_response.txt
 .intervals_key
+
+# Backup output (G1/G3) — encrypted DB snapshots, never commit to source
+timely-backup.db.enc
+*.db.enc
+daily/
+weekly/
