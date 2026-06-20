@@ -6,6 +6,45 @@ function shoeName(key){
  const g=(S.gear||[]).find(x=>x.key===key);
  return g?(g.nickname||g.display):key;
 }
+
+/* ---------------- one tactile RPE component, used everywhere ----------------
+ * Five coarse segments (anchor value = lower bound of the pair, matching
+ * the values already in the database) — coarse input for coarse control.
+ * rpeBandName() also classifies any older 1-10 slider value into the same
+ * five names, so historic logs render consistently. */
+const RPE_BANDS=[[1,'Recovery','1–2'],[3,'Easy','3–4'],[5,'Moderate','5–6'],[7,'Hard','7–8'],[9,'Max','9–10']];
+function rpeBandAnchor(v){
+ if(v==null)return null;
+ let r=RPE_BANDS[0][0];
+ RPE_BANDS.forEach(b=>{if(v>=b[0])r=b[0];});
+ return r;
+}
+function rpeBandName(v){
+ const a=rpeBandAnchor(v);
+ const b=RPE_BANDS.find(b=>b[0]===a);
+ return b?b[1]:'';
+}
+function hapticTick(){try{if(navigator.vibrate)navigator.vibrate(10);}catch(e){}}
+/* onPickExpr: a JS expression string with {v} where the picked anchor
+ * value should be substituted — lets each call site decide what "pick"
+ * means (save immediately vs. stage for an explicit Save button). */
+function rpeSegmentsHTML(containerId,selectedVal,onPickExpr){
+ const sel=rpeBandAnchor(selectedVal);
+ let h='<div class="rpe-seg" id="'+containerId+'" role="radiogroup" aria-label="Effort">';
+ RPE_BANDS.forEach(([v,name,range])=>{
+  h+='<button type="button" class="rpe-seg-btn'+(sel===v?' sel':'')+'" aria-pressed="'+(sel===v?'true':'false')+'" '+
+   'onclick="rpeSegSelect(this);'+onPickExpr.split('{v}').join(v)+'">'+
+   '<span class="rsn">'+name+'</span><span class="rsr">'+range+'</span></button>';
+ });
+ return h+'</div>';
+}
+function rpeSegSelect(btn){
+ const box=btn.parentElement;
+ box.querySelectorAll('.rpe-seg-btn').forEach(b=>{
+  const on=b===btn;b.classList.toggle('sel',on);b.setAttribute('aria-pressed',on?'true':'false');
+ });
+ hapticTick();
+}
 const IS_MOBILE=matchMedia('(max-width:700px)').matches;
 let S={schedule:[],plan:null,runs:[],weeklyActual:{},wellness:null,fitForm:null,month:null,
  prs:null,undo:null,moveItem:null,selDate:null,
@@ -27,26 +66,97 @@ function kind(t){
 const isHard=t=>/Tempo|Hill|\dx|MP Finish/.test(t);
 const kindVar={'c-easy':'easy','c-strides':'strides','c-tempo':'tempo','c-hard':'hard','c-long':'long'};
 
+let _toastRetry=null;
 function toast(msg,opts){
  opts=opts||{};
  const t=document.getElementById('toast');
  t.className=opts.err?'err':'';
+ _toastRetry=opts.retry||null;
  t.innerHTML=msg+(opts.undo?' <button class="ghost" onclick="doUndo()">Undo</button>':'')+
+   (opts.retry?' <button class="ghost" onclick="_toastRetry&&_toastRetry()">Retry</button>':'')+
    (opts.cancel?' <button class="ghost" onclick="exitMoveMode()">Cancel</button>':'');
  t.style.display='flex';
  clearTimeout(t._h);
- if(!opts.sticky)t._h=setTimeout(()=>t.style.display='none',opts.undo?6000:3000);
+ if(!opts.sticky)t._h=setTimeout(()=>t.style.display='none',(opts.undo||opts.retry)?6000:3000);
 }
 function hideToast(){document.getElementById('toast').style.display='none';}
 const KEY=new URLSearchParams(location.search).get('key')||'';
-async function jget(u){const r=await fetch(u,{headers:{'X-Key':KEY}});
+
+/* ---------------- humane errors (fetch boundary) ----------------
+ * Every server/network failure is normalized to a plain human string
+ * here, once. Nothing downstream ever sees a raw object, so
+ * "Save failed: [object Object]" is impossible by construction —
+ * including FastAPI's 422 validation shape: {detail:[{loc,msg,type},...]}. */
+function normalizeError(j,r){
+ if(j&&Array.isArray(j.detail)&&j.detail.length){
+  return j.detail.map(d=>{
+   if(d&&typeof d==='object'){
+    const field=Array.isArray(d.loc)?d.loc[d.loc.length-1]:'';
+    return (field&&field!=='body'?field+': ':'')+(d.msg||'invalid value');
+   }
+   return String(d);
+  }).join('; ');
+ }
+ if(j&&typeof j.detail==='string'&&j.detail)return j.detail;
+ if(j&&j.detail&&typeof j.detail==='object')return j.detail.msg||'Request failed';
+ if(j&&typeof j.error==='string'&&j.error)return j.error;
+ return r?('HTTP '+r.status):'Network error — check your connection';
+}
+async function jget(u){
+ let r;
+ try{r=await fetch(u,{headers:{'X-Key':KEY}});}
+ catch(e){throw new Error('Network error — check your connection');}
  const j=await r.json().catch(()=>({}));
- if(!r.ok)throw new Error(j.detail||j.error||('HTTP '+r.status));
- if(j.error)throw new Error(j.error);return j;}
-async function jpost(u,b){const r=await fetch(u,{method:'POST',headers:{'X-Key':KEY},body:JSON.stringify(b)});
+ if(!r.ok||j.error)throw new Error(normalizeError(j,r));
+ return j;
+}
+async function jpost(u,b){
+ let r;
+ try{r=await fetch(u,{method:'POST',headers:{'X-Key':KEY},body:JSON.stringify(b)});}
+ catch(e){throw new Error('Network error — check your connection');}
  const j=await r.json().catch(()=>({}));
- if(!r.ok)throw new Error(j.detail||j.error||('HTTP '+r.status));
- if(j.error)throw new Error(j.error);return j;}
+ if(!r.ok||j.error)throw new Error(normalizeError(j,r));
+ return j;
+}
+
+/* ---------------- minimal offline queue for run-log saves ----------------
+ * /api/annotate is an upsert keyed by activityId (store.py: INSERT OR
+ * REPLACE), so re-sending the same payload is always safe — no duplicate
+ * rows. We key the queue by activityId for the same reason: only the
+ * latest pending edit per run needs to survive a flaky connection. */
+const ANN_QUEUE_KEY='timelyPendingAnn';
+function loadAnnQueue(){try{return JSON.parse(localStorage.getItem(ANN_QUEUE_KEY)||'{}');}catch(e){return {};}}
+function saveAnnQueue(q){try{localStorage.setItem(ANN_QUEUE_KEY,JSON.stringify(q));}catch(e){}}
+function queueAnn(payload){const q=loadAnnQueue();q[String(payload.activityId)]=payload;saveAnnQueue(q);}
+function unqueueAnn(activityId){const q=loadAnnQueue();delete q[String(activityId)];saveAnnQueue(q);}
+let _flushingAnn=false;
+async function flushAnnQueue(){
+ if(_flushingAnn)return;
+ _flushingAnn=true;
+ try{
+  const q=loadAnnQueue();
+  const ids=Object.keys(q);
+  if(!ids.length)return;
+  let any=false;
+  for(const id of ids){
+   try{await jpost('/api/annotate',q[id]);unqueueAnn(id);any=true;}
+   catch(e){/* still offline/down — leave queued, try again later */}
+  }
+  if(any)jget('/api/actuals').then(j=>{S.runs=j.runs||[];S.weeklyActual=j.weekly||{};S.ann=j.ann||{};render();}).catch(()=>{});
+ }finally{_flushingAnn=false;}
+}
+/* Saves a run annotation with one automatic retry (~3s) before surfacing
+ * a "tap to retry" toast; queues to localStorage so a flaky connection
+ * never silently drops a log. Caller is responsible for not clearing its
+ * inputs until this resolves, so a failed save preserves what was typed. */
+async function sendAnnotate(payload){
+ try{await jpost('/api/annotate',payload);unqueueAnn(payload.activityId);return;}
+ catch(e1){
+  await new Promise(res=>setTimeout(res,3000));
+  try{await jpost('/api/annotate',payload);unqueueAnn(payload.activityId);return;}
+  catch(e2){queueAnn(payload);throw e2;}
+ }
+}
 
 async function load(force){
  try{
@@ -57,6 +167,7 @@ async function load(force){
    const c=t<lo?lo:(t>hi?hi:t);S.month=c.getFullYear()*12+c.getMonth();
   }
   render();
+  flushAnnQueue();
   jget('/api/actuals').then(j=>{S.runs=j.runs||[];S.weeklyActual=j.weekly||{};
    S.ann=j.ann||{};if(j.stale)toast('Garmin unreachable — showing locally saved data',{err:1});
    render();}).catch(()=>{});
@@ -485,14 +596,10 @@ function renderQuickLog(today){
  const known=(S.gear||[]).filter(g=>!g.retired);
  const def=known.find(g=>g.isDefault);
  const defKey=def?def.key:'';
- // RPE bands: value logged = lower bound of pair
- const bands=[[1,'1–2','Recovery'],[3,'3–4','Easy'],[5,'5–6','Moderate'],[7,'7–8','Hard'],[9,'9–10','Max']];
  let h='<div style="font-size:13px;color:var(--dim);margin-bottom:10px">How did today\'s <b style="color:var(--tx)">'+mi+' mi</b> feel?</div>'+
-  '<div style="display:flex;gap:6px;margin-bottom:12px">';
- bands.forEach(([v,label,name])=>{
-  h+='<button class="rpe-btn" onclick="quickLogRpe('+run.activityId+','+v+')" title="'+name+'">'+label+'</button>';
- });
- h+='</div>';
+  '<div style="margin-bottom:12px">'+
+  rpeSegmentsHTML('qlRpeSeg',null,'quickLogRpe('+run.activityId+',{v})')+
+  '</div>';
  if(known.length){
   h+='<select id="qlShoes" style="width:100%;background:var(--cell);border:1px solid var(--line);'+
    'color:var(--tx);border-radius:9px;padding:10px 11px;font-size:15px">'+
@@ -506,13 +613,17 @@ function renderQuickLog(today){
 async function quickLogRpe(aid,rpe){
  const sel=document.getElementById('qlShoes');
  const shoes=sel?sel.value:'';
+ const payload={activityId:aid,rpe:rpe,note:'',shoes:shoes};
  try{
-  await jpost('/api/annotate',{activityId:aid,rpe:rpe,note:'',shoes:shoes});
+  await sendAnnotate(payload);
   S.ann=S.ann||{};S.ann[String(aid)]={rpe:rpe,note:'',shoes:shoes};
-  document.getElementById('quicklogpanel').style.display='none';
-  toast('Logged '+rpe+' · '+rpeName(rpe)+(shoes?' + shoes':''));
+  const panel=document.getElementById('quicklogpanel');if(panel)panel.style.display='none';
+  toast('Logged '+rpe+' · '+rpeBandName(rpe)+(shoes?' + shoes':''));
   jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{render();});
- }catch(e){toast('Save failed: '+escapeHTML(e.message),{err:1});}
+ }catch(e){
+  // Selection + shoe choice stay on screen (quicklogpanel isn't hidden/re-rendered) so nothing is lost.
+  toast('Couldn’t save — tap to retry ('+escapeHTML(e.message)+')',{err:1,sticky:true,retry:()=>quickLogRpe(aid,rpe)});
+ }
 }
 
 function renderPRs(){
@@ -1212,11 +1323,8 @@ function renderRun(j,target,title){
  }
  const ann=(S.ann||{})[String(CUR_AID)]||{};
  h+='<h4>How did it feel? <span id="rpeVal" style="color:var(--accent);font-weight:600;text-transform:none;letter-spacing:0">'+
-   (ann.rpe?ann.rpe+' · '+rpeName(ann.rpe):'slide to rate')+'</span></h4>'+
-  '<input type="range" id="rpeSlide" min="1" max="10" step="1" value="'+(ann.rpe||5)+
-   '" oninput="rpeLab(this.value)" style="width:100%">'+
-  '<div style="display:flex;color:var(--faint);font-size:11px;justify-content:space-between;margin:2px 2px 9px">'+
-  '<span>1–3 recovery</span><span>4–6 easy</span><span>7–8 hard</span><span>9–10 max</span></div>'+
+   (ann.rpe?ann.rpe+' · '+rpeBandName(ann.rpe):'tap to rate')+'</span></h4>'+
+  '<div style="margin-bottom:9px">'+rpeSegmentsHTML('annRpeSeg',ann.rpe||null,'rpePick({v})')+'</div>'+
   '<input id="annNote" placeholder="Notes — how it went, what hurt, what worked" value="'+
    escapeHTML(ann.note||'')+'" style="width:100%;background:var(--cell);'+
    'border:1px solid var(--line);color:var(--tx);border-radius:9px;padding:10px 11px;font-size:16px;margin-bottom:8px">'+
@@ -1241,11 +1349,10 @@ function renderRun(j,target,title){
  document.getElementById('rmodal').innerHTML=h;
  initRunUX();
 }
-function rpeName(v){v=+v;return v<=3?'Recovery':(v<=6?'Easy':(v<=8?'Hard':'Max effort'));}
-function rpeLab(v){
+function rpePick(v){
  CUR_RPE=+v;
  const el=document.getElementById('rpeVal');
- if(el)el.textContent=v+' · '+rpeName(v);
+ if(el)el.textContent=v+' · '+rpeBandName(v);
 }
 function shoesSel(s){
  document.getElementById('annShoesNew').style.display=s.value==='__new'?'':'none';
@@ -1256,13 +1363,18 @@ async function saveAnn(close){
  const sel=document.getElementById('annShoesSel');
  let shoes=sel?sel.value:'';
  if(shoes==='__new')shoes=document.getElementById('annShoesNew').value.trim();
+ const payload={activityId:CUR_AID,rpe:CUR_RPE,note:note,shoes:shoes};
  try{
-  await jpost('/api/annotate',{activityId:CUR_AID,rpe:CUR_RPE,note:note,shoes:shoes});
+  await sendAnnotate(payload);
   S.ann=S.ann||{};S.ann[String(CUR_AID)]={rpe:CUR_RPE,note:note,shoes:shoes};
   toast('Logged — this is your data now');
   if(close)closeRun();
   jget('/api/gear').then(j=>{S.gear=j.gear||[];render();}).catch(()=>{render();});
- }catch(e){toast('Save failed: '+escapeHTML(e.message),{err:1});}
+ }catch(e){
+  // Note input + chosen shoe stay exactly as typed — we don't close or
+  // re-render the sheet on failure, so nothing the runner entered is lost.
+  toast('Couldn’t save — tap to retry ('+escapeHTML(e.message)+')',{err:1,sticky:true,retry:()=>saveAnn(close)});
+ }
 }
 
 function gearEdit(key){
@@ -1379,3 +1491,4 @@ async function doVacation(){
 
 try{setView(localStorage.getItem('coachView')||'today');}catch(e){setView('today');}
 load(false);
+window.addEventListener('online',flushAnnQueue);
