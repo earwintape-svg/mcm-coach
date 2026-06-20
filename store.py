@@ -10,6 +10,7 @@ CLI to share (WAL mode, short transactions).
 """
 import json
 import os
+import shutil
 import sqlite3
 import tempfile
 import threading
@@ -661,3 +662,37 @@ def export_all(dest_dir):
         finally:
             conn.close()
     return written
+
+
+def restore_from_backup(backup_dir):
+    """G9: the actual 'make restore' a human runs on purpose, distinct
+    from verify_backup() (G2, read-only, never touches the live DB).
+    Decrypts the latest snapshot, runs PRAGMA integrity_check on it
+    (refuses to restore a backup that wouldn't pass its own drill), takes
+    a timestamped safety copy of the *current* live DB first (so a
+    restore-into-the-wrong-moment is itself recoverable), then overwrites
+    the live DB. This is destructive and deliberately has no
+    confirmation prompt of its own -- callers (the CLI) own that UX;
+    this function assumes the human has already decided. Returns the
+    path of the pre-restore safety copy.
+    """
+    init()
+    latest_path = os.path.join(backup_dir, "timely-backup.db.enc")
+    with tempfile.TemporaryDirectory() as td:
+        tmp_path = os.path.join(td, "restore.db")
+        decrypt_backup(latest_path, tmp_path)
+        conn = sqlite3.connect(tmp_path)
+        try:
+            ok = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        finally:
+            conn.close()
+        if ok != "ok":
+            raise RuntimeError(
+                "backup failed integrity_check (%s) -- refusing to restore" % ok)
+
+        with _lock:
+            safety_path = DB_PATH + ".pre-restore-%d" % int(time.time())
+            if os.path.exists(DB_PATH):
+                shutil.copy2(DB_PATH, safety_path)
+            shutil.copy2(tmp_path, DB_PATH)
+    return safety_path

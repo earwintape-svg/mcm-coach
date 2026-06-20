@@ -188,18 +188,31 @@ def main():
 
     ap = argparse.ArgumentParser(description="MCM Coach — training dashboard")
     ap.add_argument("command", nargs="?",
-                     choices=["serve", "notify", "verify-backup", "export-all"], default="serve")
+                     choices=["serve", "notify", "backup", "verify-backup",
+                              "restore", "export-all"], default="serve")
     ap.add_argument("--lan", action="store_true", help="listen on Wi-Fi network (key-protected)")
     ap.add_argument("--port", type=int, default=PORT)
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--weekly", action="store_true", help="with notify: send week-in-review")
     ap.add_argument("--out", default=None,
                      help="with export-all: output directory (default: ./timely-export-YYYY-MM-DD)")
+    ap.add_argument("--yes", action="store_true",
+                     help="with restore: skip the confirmation prompt (for scripting)")
     args = ap.parse_args()
 
     if args.command == "notify":
         from src.services.notify import cmd_notify
         cmd_notify(weekly=args.weekly)
+        return
+
+    if args.command == "backup":
+        # G9: manual trigger for the same snapshot backup_loop takes
+        # every 5 min -- useful right before something risky (a schema
+        # change, an upload --force) when you don't want to wait.
+        import store
+        bd = BACKUP_DIR or str(_ASSET_DIR)
+        dest = store.backup(bd)
+        print("Backed up to %s" % dest)
         return
 
     if args.command == "verify-backup":
@@ -214,6 +227,31 @@ def main():
             print("BACKUP VERIFICATION FAILED: %s" % e)
             sys.exit(1)
         print("Backup OK — %s" % counts)
+        return
+
+    if args.command == "restore":
+        # G9: the destructive one. No automated path calls this -- it's
+        # only ever a human, on purpose, after deciding the live DB needs
+        # to go back to the last good snapshot. Confirms before
+        # overwriting unless --yes (for scripting); store.restore_from_
+        # backup() itself still refuses if the backup fails integrity_
+        # check, and takes a timestamped safety copy of the current live
+        # DB before overwriting it either way.
+        import store
+        bd = BACKUP_DIR or str(_ASSET_DIR)
+        if not args.yes:
+            resp = input(
+                "This OVERWRITES the live database with the last backup "
+                "in %s. Type 'yes' to continue: " % bd)
+            if resp.strip().lower() != "yes":
+                print("Aborted -- nothing changed.")
+                return
+        try:
+            safety = store.restore_from_backup(bd)
+        except Exception as e:
+            print("RESTORE FAILED: %s" % e)
+            sys.exit(1)
+        print("Restored. Previous live DB saved to %s" % safety)
         return
 
     if args.command == "export-all":

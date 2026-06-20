@@ -11,6 +11,7 @@ from conftest.py, so this never touches the real database OR the real
 ~/.timely_backup_key).
 """
 import os
+import sqlite3
 import time
 
 import pytest
@@ -147,3 +148,59 @@ class TestVerifyBackup:
         conn.close()
         with pytest.raises(RuntimeError, match="0 runs but the live DB has"):
             store.verify_backup(str(tmp_path))
+
+
+class TestRestoreFromBackup:
+    """G9: restore_from_backup() is the destructive counterpart to
+    verify_backup() -- this actually overwrites the live DB, which
+    verify_backup() never does. Confirmation UX lives in the CLI
+    (main.py), not here -- these tests call the function directly, the
+    same way a confirmed CLI invocation eventually would."""
+
+    def test_restore_overwrites_live_db_with_backup_contents(self, tmp_path):
+        store.set_annotation(activity_id="1", note="before backup")
+        store.backup(str(tmp_path))
+        store.set_annotation(activity_id="2", note="after backup, should vanish on restore")
+
+        store.restore_from_backup(str(tmp_path))
+
+        notes = {k: v["note"] for k, v in store.get_annotations().items()}
+        assert notes.get("1") == "before backup"
+        assert "2" not in notes
+
+    def test_restore_writes_a_timestamped_safety_copy_of_the_live_db(self, tmp_path):
+        store.set_annotation(activity_id="1", note="v1")
+        store.backup(str(tmp_path))
+        store.set_annotation(activity_id="2", note="v2, about to be wiped")
+
+        safety_path = store.restore_from_backup(str(tmp_path))
+
+        assert os.path.exists(safety_path)
+        assert ".pre-restore-" in safety_path
+        # The safety copy must hold the *pre-restore* state (v2 present),
+        # not the restored one -- otherwise it's not actually a safety net.
+        conn = sqlite3.connect(safety_path)
+        row = conn.execute(
+            "SELECT note FROM annotations WHERE activity_id='2'").fetchone()
+        conn.close()
+        assert row is not None and row[0] == "v2, about to be wiped"
+
+    def test_restore_refuses_a_backup_that_fails_integrity_check(self, tmp_path):
+        store.backup(str(tmp_path))
+        # Corrupt the ciphertext after the fact so decryption "succeeds"
+        # at the Fernet layer but the resulting bytes aren't a valid
+        # SQLite file -- integrity_check must catch this, not a crash
+        # deep in sqlite3.connect().
+        fernet = store._backup_fernet()
+        garbage = fernet.encrypt(b"not a real sqlite database")
+        with open(os.path.join(tmp_path, "timely-backup.db.enc"), "wb") as f:
+            f.write(garbage)
+
+        store.set_annotation(activity_id="1", note="must survive a refused restore")
+        with pytest.raises(Exception):
+            store.restore_from_backup(str(tmp_path))
+
+        # Live DB must be untouched -- a refused restore is a no-op, not
+        # a partial one.
+        notes = {k: v["note"] for k, v in store.get_annotations().items()}
+        assert notes.get("1") == "must survive a refused restore"

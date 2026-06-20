@@ -72,7 +72,13 @@ frontend* and published on GitHub Pages.
   on purpose: plain, unencrypted JSON, one file per table
   (`EXPORT_TABLES`), openable by anything -- a text editor, a different
   app, nothing this codebase controls -- if this app or the unofficial
-  Garmin API it rides on ever stops existing. `python3
+  Garmin API it rides on ever stops existing. `restore_from_backup()`
+  (G9) is the destructive counterpart to `verify_backup()`: decrypts the
+  latest snapshot, refuses to proceed if it fails `integrity_check`,
+  takes a timestamped safety copy of the *current* live DB, then
+  overwrites it. No automated path calls this -- only a human, via
+  `python3 main.py restore` (prompts for confirmation unless `--yes`) or
+  `make restore`. `python3
   main.py verify-backup` runs it on demand. Migrations are versioned
   (`schema_version` + an ordered `MIGRATIONS` list, T7, resolved) — see
   `tests/test_store_migrations.py`.
@@ -177,6 +183,12 @@ frontend* and published on GitHub Pages.
   interactive OAuth consent flow (writes `~/.gcal_token.json`, outside the
   repo). This is additive, not a replacement: Garmin Connect still owns
   the watch push, intervals.icu still owns the actuals read.
+- **`Makefile`** (G9) — wraps `lan.sh`/`ship.sh`/`main.py`'s subcommands
+  under one set of names (`make test`, `make backup`, `make restore`,
+  `make deploy`, ...; `make help` lists all of them with descriptions
+  pulled from the `## comment` after each target). Doesn't reimplement
+  anything -- every target's real logic still lives in exactly one place,
+  this just lowers the cost of remembering which script does what.
 - **`lan.sh`** — service manager: LaunchAgent running the server from App
   Support (a copy — macOS TCC forbids launchd reading ~/Documents),
   re-synced on every install/restart (now copies `main.py`, `src/`,
