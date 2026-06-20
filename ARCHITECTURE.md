@@ -59,7 +59,16 @@ frontend* and published on GitHub Pages.
   silently destroy the only copy. `verify_backup()` (G2) loads the latest
   snapshot into a throwaway temp DB, runs `PRAGMA integrity_check`, and
   sanity-checks row counts against the live DB; `restore_drill_loop` runs
-  it monthly (cadence tracked in `kv`, survives restarts) and `python3
+  it monthly (cadence tracked in `kv`, survives restarts). Snapshots are
+  Fernet-encrypted (G3, 2026-06-19) before they're written — the sqlite
+  backup happens in a private temp dir and only the ciphertext ever
+  touches `BACKUP_DIR`, so plaintext never sits in the Drive-synced
+  folder even transiently. Key at `~/.timely_backup_key` (outside the
+  repo, 0600, generated on first use — same pattern as
+  `~/.mcm_coach_key`); `store.decrypt_backup()` is the manual-recovery
+  path, deliberately needing nothing but that key file and the
+  `cryptography` package so recovery doesn't depend on the rest of the
+  app working. `python3
   main.py verify-backup` runs it on demand. Migrations are versioned
   (`schema_version` + an ordered `MIGRATIONS` list, T7, resolved) — see
   `tests/test_store_migrations.py`.
@@ -203,9 +212,15 @@ frontend* and published on GitHub Pages.
    Residual risk: high and irreducible without Garmin's official program.
 2. **Single machine, single point of failure.** The Mac is the cloud. If
    it's asleep, dead, or off Wi-Fi: no app, no pushes, no sync (the watch
-   plan keeps working — workouts are already on Garmin). DB backup is a
-   daily copy to a Drive-synced folder; the DB itself is unencrypted
-   health data at rest on disk.
+   plan keeps working — workouts are already on Garmin). Backups (G1,
+   2026-06-19) are rolling daily/weekly snapshots to a Drive-synced
+   folder, encrypted before they ever touch that folder (G3, same date —
+   see "Data plane" above for both). The live DB on the Mac itself
+   relies on **FileVault** for at-rest encryption — full-disk encryption
+   status is a macOS setting this codebase has no way to check or change
+   from inside a sandboxed dev environment; confirming it's actually on
+   is a standing manual action item for whoever runs this on real
+   hardware, not something a commit can certify.
 3. **No TLS from the server itself.** LAN traffic is plain HTTP guarded by
    a bearer key in the URL (which lands in browser history). Tailscale
    wraps remote traffic in WireGuard, which is the real transport

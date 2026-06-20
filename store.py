@@ -10,12 +10,13 @@ CLI to share (WAL mode, short transactions).
 """
 import json
 import os
-import shutil
 import sqlite3
 import tempfile
 import threading
 import time
 from datetime import date
+
+from cryptography.fernet import Fernet, InvalidToken
 
 DB_PATH = os.environ.get("TIMELY_DB") or os.path.join(
     os.path.expanduser("~/Library/Application Support/MCMCoach"), "timely.db")
@@ -445,6 +446,28 @@ def delete_gcal_event(schedule_id):
         c.execute("DELETE FROM gcal_events WHERE schedule_id=?", (str(schedule_id),))
 
 
+_BACKUP_KEY_PATH = os.path.expanduser("~/.timely_backup_key")
+
+
+def _backup_fernet():
+    """G3: the key for encrypting backups before they leave the (FileVault-
+    encrypted) Mac disk. Lives outside the repo, same pattern as
+    ~/.garmin_tokens and ~/.mcm_coach_key -- generated on first use,
+    0600 permissions, never logged or returned from any API."""
+    try:
+        with open(_BACKUP_KEY_PATH, "rb") as f:
+            key = f.read().strip()
+        if key:
+            return Fernet(key)
+    except FileNotFoundError:
+        pass
+    key = Fernet.generate_key()
+    with open(_BACKUP_KEY_PATH, "wb") as f:
+        f.write(key)
+    os.chmod(_BACKUP_KEY_PATH, 0o600)
+    return Fernet(key)
+
+
 def backup(dest_dir):
     """Online backup of the whole DB (safe while in use) into dest_dir.
     The proprietary dataset should never live on exactly one disk.
@@ -457,10 +480,20 @@ def backup(dest_dir):
     day's latest state) and a weekly/ file per ISO week, written once on
     the first backup of that week and left alone afterward -- a fixed
     checkpoint, not a moving target. Both are pruned to a retention
-    window. `timely-backup.db` (the old single-file path) is kept too,
-    as a fast "most recent" pointer -- nothing else in the codebase reads
-    daily/weekly directly yet, but keeping the old path means nothing
-    that already depends on it breaks.
+    window. `timely-backup.db.enc` (the old single-file path, now
+    encrypted -- see G3 below) is kept too, as a fast "most recent"
+    pointer.
+
+    G3: dest_dir is the Drive-synced project folder -- it leaves the
+    Mac's encrypted disk the moment Drive uploads it. The live DB itself
+    is covered by FileVault (confirm this is actually on -- this code
+    can't check that from here, see ARCHITECTURE.md), but a copy in
+    cloud storage isn't covered by local disk encryption at all. The
+    sqlite backup is taken to a private temp directory (never written
+    into dest_dir), encrypted there with Fernet (AES-128-CBC + HMAC) using
+    a key in ~/.timely_backup_key, and only the ciphertext ever touches
+    dest_dir -- plaintext never exists in the synced folder, not even
+    transiently.
     """
     init()
     daily_dir = os.path.join(dest_dir, "daily")
@@ -469,24 +502,33 @@ def backup(dest_dir):
     os.makedirs(weekly_dir, exist_ok=True)
 
     today = date.today()
-    daily_path = os.path.join(daily_dir, "timely-%s.db" % today.isoformat())
+    daily_path = os.path.join(daily_dir, "timely-%s.db.enc" % today.isoformat())
     iso_year, iso_week, _ = today.isocalendar()
-    weekly_path = os.path.join(weekly_dir, "timely-%04d-W%02d.db" % (iso_year, iso_week))
-    latest_path = os.path.join(dest_dir, "timely-backup.db")
+    weekly_path = os.path.join(weekly_dir, "timely-%04d-W%02d.db.enc" % (iso_year, iso_week))
+    latest_path = os.path.join(dest_dir, "timely-backup.db.enc")
 
-    with _lock:
-        src = _conn()
-        try:
-            dst = sqlite3.connect(daily_path)
-            with dst:
-                src.backup(dst)
-            dst.close()
-        finally:
-            src.close()
+    fernet = _backup_fernet()
+    with tempfile.TemporaryDirectory() as td:
+        plain_path = os.path.join(td, "plain.db")
+        with _lock:
+            src = _conn()
+            try:
+                dst = sqlite3.connect(plain_path)
+                with dst:
+                    src.backup(dst)
+                dst.close()
+            finally:
+                src.close()
+        with open(plain_path, "rb") as f:
+            ciphertext = fernet.encrypt(f.read())
 
-    shutil.copy2(daily_path, latest_path)
+    with open(daily_path, "wb") as f:
+        f.write(ciphertext)
+    with open(latest_path, "wb") as f:
+        f.write(ciphertext)
     if not os.path.exists(weekly_path):
-        shutil.copy2(daily_path, weekly_path)
+        with open(weekly_path, "wb") as f:
+            f.write(ciphertext)
 
     _prune_snapshots(daily_dir, keep=14)
     _prune_snapshots(weekly_dir, keep=8)
@@ -494,16 +536,30 @@ def backup(dest_dir):
 
 
 def _prune_snapshots(dirpath, keep):
-    """Filenames are timely-YYYY-MM-DD.db / timely-YYYY-Www.db -- both
-    sort lexicographically in chronological order, so a plain sort is
-    enough to find the oldest."""
+    """Filenames are timely-YYYY-MM-DD.db.enc / timely-YYYY-Www.db.enc --
+    both sort lexicographically in chronological order, so a plain sort
+    is enough to find the oldest."""
     files = sorted(f for f in os.listdir(dirpath)
-                    if f.startswith("timely-") and f.endswith(".db"))
+                    if f.startswith("timely-") and f.endswith(".db.enc"))
     for f in files[:-keep] if len(files) > keep else []:
         try:
             os.remove(os.path.join(dirpath, f))
         except OSError:
             pass
+
+
+def decrypt_backup(src_path, dest_path):
+    """G3: manual recovery path. A backup you can't decrypt without this
+    exact app running isn't much safer than no backup -- this is the one
+    function that needs nothing but the key file and the cryptography
+    library, so recovery doesn't depend on the rest of the app working.
+    Raises cryptography.fernet.InvalidToken if the key doesn't match."""
+    fernet = _backup_fernet()
+    with open(src_path, "rb") as f:
+        plaintext = fernet.decrypt(f.read())
+    with open(dest_path, "wb") as f:
+        f.write(plaintext)
+    return dest_path
 
 
 def verify_backup(dest_dir):
@@ -514,14 +570,25 @@ def verify_backup(dest_dir):
     -- a function that silently returns False here would recreate the
     exact gap this ticket exists to close. Returns a dict of row counts
     on success.
+
+    G3: the snapshot is encrypted on disk (see backup()) -- this also
+    exercises decrypt_backup() every time it runs, so a key mismatch or
+    corrupted ciphertext surfaces via the same monthly drill + phone-push
+    machinery as a corrupt DB would, instead of staying silent until the
+    day someone actually needs to restore.
     """
-    latest_path = os.path.join(dest_dir, "timely-backup.db")
+    latest_path = os.path.join(dest_dir, "timely-backup.db.enc")
     if not os.path.exists(latest_path):
         raise RuntimeError("no backup found at %s" % latest_path)
 
     with tempfile.TemporaryDirectory() as td:
         tmp_path = os.path.join(td, "restore_check.db")
-        shutil.copy2(latest_path, tmp_path)
+        try:
+            decrypt_backup(latest_path, tmp_path)
+        except InvalidToken:
+            raise RuntimeError(
+                "backup at %s could not be decrypted -- key mismatch or "
+                "corrupted ciphertext" % latest_path)
         conn = sqlite3.connect(tmp_path)
         try:
             ok = conn.execute("PRAGMA integrity_check").fetchone()[0]

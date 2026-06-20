@@ -1,17 +1,20 @@
-"""Tests for store.py's G1 (versioned snapshots) and G2 (verified
-restore) backup work.
+"""Tests for store.py's G1 (versioned snapshots), G2 (verified restore),
+and G3 (encryption at rest) backup work.
 
 Before this, backup() overwrote a single timely-backup.db every call --
 fine until one bad write corrupts the only copy you have, with no older
 snapshot to fall back to. These tests exercise the new daily/weekly
-rotation + retention pruning, and verify_backup()'s integrity_check +
-row-count sanity checks (using the isolated_store fixture from conftest.py,
-so this never touches the real database).
+rotation + retention pruning, verify_backup()'s integrity_check + row-
+count sanity checks, and the Fernet encrypt/decrypt round trip that now
+sits between every snapshot and disk (using the isolated_store fixture
+from conftest.py, so this never touches the real database OR the real
+~/.timely_backup_key).
 """
 import os
 import time
 
 import pytest
+from cryptography.fernet import InvalidToken
 
 import store
 
@@ -22,11 +25,51 @@ class TestBackupRotation:
         dest = store.backup(str(tmp_path))
 
         assert os.path.exists(dest)
-        assert os.path.basename(dest) == "timely-backup.db"
+        assert os.path.basename(dest) == "timely-backup.db.enc"
         daily_files = os.listdir(tmp_path / "daily")
         weekly_files = os.listdir(tmp_path / "weekly")
         assert len(daily_files) == 1
         assert len(weekly_files) == 1
+        assert daily_files[0].endswith(".db.enc")
+        assert weekly_files[0].endswith(".db.enc")
+
+    def test_backup_files_are_actually_encrypted(self, tmp_path):
+        """G3: the plaintext SQLite header ("SQLite format 3\\x00") must
+        never appear in what lands in dest_dir -- that's the entire point
+        of this ticket. Confirms by attempting to open the snapshot
+        directly as SQLite (must fail) and checking the raw bytes don't
+        contain the magic header."""
+        dest = store.backup(str(tmp_path))
+        raw = open(dest, "rb").read()
+        assert b"SQLite format 3" not in raw
+
+    def test_backup_decrypts_back_to_a_valid_sqlite_db(self, tmp_path):
+        store.set_annotation(activity_id="1", note="round trip")
+        dest = store.backup(str(tmp_path))
+        out_path = tmp_path / "decrypted.db"
+        store.decrypt_backup(dest, str(out_path))
+        assert out_path.read_bytes().startswith(b"SQLite format 3")
+
+    def test_wrong_key_fails_to_decrypt(self, tmp_path, monkeypatch):
+        dest = store.backup(str(tmp_path))
+        # Swap in a different key, as if the real key file were lost or
+        # mismatched -- decrypting with it must fail loudly, not produce
+        # garbage that looks like it might be a database.
+        monkeypatch.setattr(store, "_BACKUP_KEY_PATH", str(tmp_path / "other_key"))
+        with pytest.raises(InvalidToken):
+            store.decrypt_backup(dest, str(tmp_path / "out.db"))
+
+    def test_backup_key_is_created_once_and_reused(self, tmp_path):
+        store.backup(str(tmp_path))
+        assert os.path.exists(store._BACKUP_KEY_PATH)
+        key_after_first = open(store._BACKUP_KEY_PATH, "rb").read()
+        store.backup(str(tmp_path))
+        assert open(store._BACKUP_KEY_PATH, "rb").read() == key_after_first
+
+    def test_backup_key_file_is_user_only_permissions(self, tmp_path):
+        store.backup(str(tmp_path))
+        mode = os.stat(store._BACKUP_KEY_PATH).st_mode & 0o777
+        assert mode == 0o600
 
     def test_same_day_backups_overwrite_one_daily_file(self, tmp_path):
         store.backup(str(tmp_path))
@@ -53,19 +96,19 @@ class TestBackupRotation:
         daily_dir.mkdir(parents=True)
         # Seed 16 fake daily snapshot files (chronological by name).
         for i in range(16):
-            (daily_dir / ("timely-2026-01-%02d.db" % (i + 1))).write_bytes(b"x")
+            (daily_dir / ("timely-2026-01-%02d.db.enc" % (i + 1))).write_bytes(b"x")
         store._prune_snapshots(str(daily_dir), keep=14)
         remaining = sorted(os.listdir(daily_dir))
         assert len(remaining) == 14
         # The two oldest (01, 02) should be the ones pruned.
-        assert "timely-2026-01-01.db" not in remaining
-        assert "timely-2026-01-02.db" not in remaining
-        assert "timely-2026-01-16.db" in remaining
+        assert "timely-2026-01-01.db.enc" not in remaining
+        assert "timely-2026-01-02.db.enc" not in remaining
+        assert "timely-2026-01-16.db.enc" in remaining
 
     def test_retention_noop_under_the_limit(self, tmp_path):
         d = tmp_path / "few"
         d.mkdir()
-        (d / "timely-2026-01-01.db").write_bytes(b"x")
+        (d / "timely-2026-01-01.db.enc").write_bytes(b"x")
         store._prune_snapshots(str(d), keep=14)
         assert len(os.listdir(d)) == 1
 
@@ -83,12 +126,12 @@ class TestVerifyBackup:
 
     def test_raises_on_corrupt_backup_file(self, tmp_path):
         store.backup(str(tmp_path))
-        # Truncate the "latest" pointer file to garbage bytes -- not a
-        # valid SQLite file at all, so integrity_check (or even opening
-        # it) should fail loudly rather than silently look like a normal,
-        # if Spartan, database.
-        latest = tmp_path / "timely-backup.db"
-        latest.write_bytes(b"not a real sqlite file" * 50)
+        # Truncate the "latest" pointer file to garbage bytes -- not even
+        # valid Fernet ciphertext, so decryption itself should fail
+        # loudly rather than silently producing garbage that looks like
+        # it might be a database.
+        latest = tmp_path / "timely-backup.db.enc"
+        latest.write_bytes(b"not a real encrypted backup" * 50)
         with pytest.raises(Exception):
             store.verify_backup(str(tmp_path))
 

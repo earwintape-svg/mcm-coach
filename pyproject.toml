@@ -19,6 +19,7 @@ dependencies = [
     "google-auth-httplib2>=0.2.0,<1.0",
     "google-auth-oauthlib>=1.2.0,<2.0",
     "garminconnect>=0.2.8,<1.0",
+    "cryptography>=42.0,<46.0",
 ]
 
 [project.optional-dependencies]
