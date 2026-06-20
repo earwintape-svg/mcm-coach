@@ -10,6 +10,18 @@ full list (FastAPI, uvicorn, garminconnect, and the Google API client
 libraries used by the Calendar sync below). Production runs **Python
 3.9.6** — verify any change there before assuming a newer interpreter.
 
+For a reproducible install (G8 — same exact versions every time, not
+whatever the resolver picks today), use `requirements.lock` instead:
+`pip install -r requirements.lock`. It's a fully pinned, hashed lockfile
+generated with `uv pip compile --python-version 3.9 --generate-hashes
+requirements.txt -o requirements.lock` — `uv` rather than plain
+`pip-tools`, specifically because `uv` can resolve *for* Python 3.9
+without that interpreter being installed on whatever machine generates
+the file (this repo's dev sandbox only has 3.10; plain `pip-compile`
+resolves against the running interpreter, which would have silently
+produced a lockfile pinned to versions that only promise to support
+3.10+). Regenerate it the same way after editing `requirements.txt`.
+
 ## What changed from v1
 
 1. **Plan is data, not code.** All 93 workouts live in `plan.py` as one line each (`(4, "Tue", interval_workout(6, 800, 400))`). Edit distances there; builders and uploader are untouched.
@@ -86,7 +98,8 @@ The full UI on a synthetic athlete (mid-week-6: on-target runs, one missed day, 
 
 ```bash
 python3 -m pip install -e ".[dev]"   # pytest, ruff, detect-secrets, mypy
-python3 -m pytest -q                  # 106 tests, no network
+python3 -m pip install -r requirements.lock   # reproducible runtime install (G8) -- see below
+python3 -m pytest -q                  # 117 tests, no network
 ruff check .                          # lint
 mypy                                   # type check, pinned to 3.9 (see pyproject.toml)
 ```
