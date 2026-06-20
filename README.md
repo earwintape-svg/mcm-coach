@@ -99,7 +99,7 @@ The full UI on a synthetic athlete (mid-week-6: on-target runs, one missed day, 
 ```bash
 python3 -m pip install -e ".[dev]"   # pytest, ruff, detect-secrets, mypy
 python3 -m pip install -r requirements.lock   # reproducible runtime install (G8) -- see below
-python3 -m pytest -q                  # 117 tests, no network
+python3 -m pytest -q                  # 137 tests, no network
 ruff check .                          # lint
 mypy                                   # type check, pinned to 3.9 (see pyproject.toml)
 ```

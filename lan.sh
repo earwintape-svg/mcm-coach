@@ -7,8 +7,11 @@
 #   ./lan.sh status      is it running? + last log lines
 #   ./lan.sh restart     bounce it (e.g. after shipping new code)
 #   ./lan.sh uninstall   remove the background service
+#   ./lan.sh healthcheck-on   G12: alert if the server stops answering
+#   ./lan.sh healthcheck-off  turn that off
 set -e
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
 LABEL="com.earwin.mcmcoach"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
@@ -68,6 +71,28 @@ phone_url() {
     echo "Anywhere (Tailscale): http://$TSIP:8765/?key=$KEY"
   fi
   return 0
+}
+
+do_healthcheck() {
+  # G12: the other half of "is the always-on server actually on?".
+  # KeepAlive (in the main plist) already restarts a *crashed* process --
+  # it can't tell if the process is still running but wedged (event loop
+  # deadlocked, port open but never answering). This is a one-shot poll
+  # of /healthz (no auth, no DB work -- see main.py) with its own
+  # short timeout, run on its own launchd schedule via healthcheck-on
+  # below. Silent on success; alerts (Mac notification + ntfy phone push,
+  # same channels notify.py's _push uses) on failure.
+  if curl -fsS --max-time 5 "http://127.0.0.1:8765/healthz" >/dev/null 2>&1; then
+    exit 0
+  fi
+  MSG="timely: server unreachable on :8765 (healthcheck failed)"
+  echo "$MSG"
+  osascript -e "display notification \"$MSG\" with title \"timely\"" 2>/dev/null || true
+  TOPIC="$(cat "$HOME/.timely_ntfy" 2>/dev/null || true)"
+  if [ -n "$TOPIC" ]; then
+    curl -fsS --max-time 10 -H "Title: timely" -H "Tags: warning,rotating_light" \
+      -d "$MSG" "https://ntfy.sh/$TOPIC" >/dev/null 2>&1 || true
+  fi
 }
 
 case "${1:-status}" in
@@ -151,9 +176,46 @@ EOF
     else
       echo "✗ NOT listening on :8765 — see log below"
     fi
+    if launchctl print "gui/$(id -u)/$LABEL.healthcheck" >/dev/null 2>&1; then
+      echo "● healthcheck watcher loaded (./lan.sh healthcheck-off to disable)"
+    else
+      echo "○ healthcheck watcher not installed — ./lan.sh healthcheck-on"
+    fi
     phone_url
     echo "--- recent log ---"
     tail -15 "$LOG" 2>/dev/null || echo "(no log yet)"
+    ;;
+  healthcheck)
+    # One-shot: poll /healthz now, alert if it fails. Useful to test
+    # healthcheck-on's alerting without waiting for the schedule.
+    do_healthcheck
+    ;;
+  healthcheck-on)
+    HPLIST="$HOME/Library/LaunchAgents/$LABEL.healthcheck.plist"
+    launchctl bootout "gui/$(id -u)/$LABEL.healthcheck" 2>/dev/null || true
+    cat > "$HPLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$LABEL.healthcheck</string>
+  <key>ProgramArguments</key>
+  <array><string>$SCRIPT_DIR/lan.sh</string><string>healthcheck</string></array>
+  <key>StartInterval</key><integer>300</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>$LOG</string>
+  <key>StandardErrorPath</key><string>$LOG</string>
+</dict></plist>
+EOF
+    launchctl bootstrap "gui/$(id -u)" "$HPLIST"
+    echo "✅ healthcheck on: polls :8765/healthz every 5 min, alerts (Mac notification"
+    echo "   + phone push) if it doesn't answer. KeepAlive on the main job already"
+    echo "   restarts a *crashed* server -- this catches one that's up but wedged."
+    ;;
+  healthcheck-off)
+    launchctl bootout "gui/$(id -u)/$LABEL.healthcheck" 2>/dev/null || true
+    rm -f "$HOME/Library/LaunchAgents/$LABEL.healthcheck.plist"
+    echo "healthcheck watcher off."
     ;;
   watch)
     # Leave this running in a Terminal tab: Claude drops a .ship_request
@@ -173,6 +235,6 @@ EOF
     done
     ;;
   *)
-    echo "usage: ./lan.sh {install|url|status|restart|uninstall|notify-on|notify-off|watch}"
+    echo "usage: ./lan.sh {install|url|status|restart|uninstall|notify-on|notify-off|healthcheck-on|healthcheck-off|watch}"
     ;;
 esac

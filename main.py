@@ -27,6 +27,7 @@ from src.services.notify import run_watcher, backup_loop, restore_drill_loop, ga
 from src.services.applog import get_logger
 
 log = get_logger("http")
+_START_TIME = time.time()
 
 # ---------------------------------------------------------------------------
 # App icon (pure stdlib PNG — no Pillow, no asset files, can't go missing)
@@ -168,6 +169,20 @@ def appjs():
 def index():
     return HTMLResponse(content=_asset("ui.html").decode(),
                         headers={"Cache-Control": "no-store"})
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    """G12: trivial liveness probe. Deliberately unauthenticated (an
+    external uptime check can't carry the LAN key) and deliberately does
+    no DB/network work (a health check that can fail for reasons
+    unrelated to "is the process up" defeats its own purpose). launchd's
+    KeepAlive already restarts a *crashed* process -- this closes the
+    other half of "is it actually on": a process that's still running but
+    wedged (event loop deadlocked) won't trip KeepAlive but will fail to
+    answer this. lan.sh's `healthcheck-on` polls this from a separate
+    launchd job and pushes an alert if it doesn't get a 200."""
+    return {"status": "ok", "uptime_sec": round(time.time() - _START_TIME, 1)}
 
 
 # ---------------------------------------------------------------------------

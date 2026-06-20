@@ -143,6 +143,19 @@ frontend* and published on GitHub Pages.
   method/path/status/latency per request (info, or warning at ≥400) —
   before this, an error report from the phone had nothing server-side to
   correlate it against.
+- **Uptime check (G12, 2026-06-20)**: `GET /healthz` is a trivial
+  unauthenticated liveness route on `main.py` (no DB/network work, so it
+  can't fail for reasons unrelated to "is the process up"). `lan.sh
+  healthcheck-on` installs a *second*, independent launchd job
+  (`StartInterval` 5 min) that polls it and pushes an alert (same
+  osascript+ntfy channels as everything else) if it doesn't get a 200.
+  Deliberately a separate process from the main server: the main
+  LaunchAgent's `KeepAlive` already restarts a server that *crashes*, but
+  can't detect one that's still running with the port open yet wedged
+  (event-loop deadlock) — that's the gap this closes. Off by default
+  (opt-in, like `notify-on`/`notify-off`) — enabling it adds an
+  always-running background job the user should consciously choose, not
+  one `lan.sh install` silently turns on.
 - **Notifications**: macOS `osascript` + phone push via ntfy.sh (secret
   topic in `~/.timely_ntfy`). Scheduled by LaunchAgents: 7:30 briefing,
   18:30 log-nudge, Sunday 18:00 week-in-review.
@@ -200,7 +213,8 @@ frontend* and published on GitHub Pages.
   re-synced on every install/restart (now copies `main.py`, `src/`,
   `intervalsicu_read.py`, `requirements.txt` in addition to the original
   file set, and pip-installs the new deps); status/url/notify-on/
-  notify-off; `watch` = autoship loop (a `.ship_request` file containing
+  notify-off/healthcheck-on/healthcheck-off (G12 — see "Serve plane"
+  above); `watch` = autoship loop (a `.ship_request` file containing
   only a commit message triggers `ship.sh`).
 - **`ship.sh`** — tests → demo rebuild → git commit/push → server restart.
   Also broke silently during the migration: it ran the retired
@@ -247,7 +261,13 @@ frontend* and published on GitHub Pages.
    status is a macOS setting this codebase has no way to check or change
    from inside a sandboxed dev environment; confirming it's actually on
    is a standing manual action item for whoever runs this on real
-   hardware, not something a commit can certify.
+   hardware, not something a commit can certify. As for actually knowing
+   *whether* the Mac/server is currently down rather than finding out
+   days later: `GET /healthz` + `lan.sh healthcheck-on` (G12, 2026-06-20)
+   close the "is it actually on" half of that gap with an automated
+   poll-and-alert (opt-in, off by default — see "Serve plane" above).
+   They can't fix the underlying single-machine risk, only shrink the
+   time-to-notice when it bites.
 3. **No TLS from the server itself.** LAN traffic is plain HTTP guarded by
    a bearer key in the URL (which lands in browser history). Tailscale
    wraps remote traffic in WireGuard, which is the real transport
@@ -326,15 +346,27 @@ Day 1: run `./lan.sh status`, `python3 -m pytest -q`, read `builders.py`
 top comments and `store.py` SCHEMA — that's 80% of the mental model. Then
 read `src/services/actuals.py` for the intervals.icu/Garmin/store
 precedence and `src/services/gcal.py` for the Calendar mirror — both are
-new since this doc was first written and easy to miss. T0–T8 and T10 are
-done (CI, XSS, Pydantic request models, versioned migrations, the 3.9 pin
-— see the weakness register above for what each closed). Current
-priority, per the 2026-06-19 EM review (`product/ENGINEERING_REVIEW_TASKS.md`
-rev.4): G1+G2 (versioned, verified backups) first — "protect the data" is
-the stated top goal and a corrupted single-file backup is the biggest
-single-point-of-failure left; then G5 (pre-commit secret scanning) and G7
-(mypy in CI); T11/G3/G4 and the rest of G6–G12 round out the backlog.
+new since this doc was first written and easy to miss.
+
+As of 2026-06-20, the full T0–T11 + G1–G12 backlog from the 2026-06-19 EM
+review (`product/ENGINEERING_REVIEW_TASKS.md` rev.2) is done: CI, XSS
+fixes, Pydantic request models, versioned migrations, the 3.9 pin,
+encrypted/verified backups with drill automation (G1–G3), one-command
+export (G4), pre-commit secret scanning + lint/format/mypy (G5–G7), a
+dependency lockfile (G8), a Makefile (G9), crash visibility for every
+background thread (G10), an automated weekly Garmin schema-drift canary
+(G11), and an unauthenticated `/healthz` route plus an opt-in
+poll-and-alert watcher for it (G12) — see the weakness register above and
+the "Serve plane"/"Data plane" sections for what each one actually does
+and what it doesn't fix. Nothing in this backlog removes the single-Mac
+risk (weakness #2) or the unofficial-Garmin-API risk (weakness #1) —
+they're both still structurally true — but time-to-notice for both is
+now measured in minutes/a week rather than "whenever a human happens to
+check."
+
 `product/` now holds `ROADMAP.md` and the task briefs (moved there
 2026-06-19, see `AGENTS.md` for the OPEN/RESTRICTED zone split that
-motivated it) — `PRDS.md`/`WRITEUP.md` stay archived at `archive/` as
-historical record, superseded by `product/ROADMAP.md` and this file.
+motivated it, though note `AGENTS.md` itself moved to trunk-based
+development mid-cycle — re-read it rather than trusting this paragraph)
+— `PRDS.md`/`WRITEUP.md` stay archived at `archive/` as historical
+record, superseded by `product/ROADMAP.md` and this file.

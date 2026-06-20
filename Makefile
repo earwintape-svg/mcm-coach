@@ -6,8 +6,8 @@
 
 .DEFAULT_GOAL := help
 .PHONY: help install run lan-install lan-status lan-restart lan-uninstall \
-        notify-on notify-off test lint typecheck check backup verify-backup \
-        restore export deploy clean lock
+        notify-on notify-off healthcheck healthcheck-on healthcheck-off \
+        test lint typecheck check backup verify-backup restore export deploy clean lock
 
 help: ## Show this list
 	@echo "timely -- available targets:"
@@ -37,6 +37,15 @@ notify-on: ## Turn on daily briefing / log-nudge / weekly-review pushes
 
 notify-off: ## Turn off scheduled pushes
 	./lan.sh notify-off
+
+healthcheck: ## One-shot poll of /healthz now -- alerts if unreachable (G12)
+	./lan.sh healthcheck
+
+healthcheck-on: ## Alert if the server stops answering -- polls every 5 min (G12)
+	./lan.sh healthcheck-on
+
+healthcheck-off: ## Turn off the healthcheck watcher
+	./lan.sh healthcheck-off
 
 test: ## Run the test suite (no network)
 	python3 -m pytest -q
