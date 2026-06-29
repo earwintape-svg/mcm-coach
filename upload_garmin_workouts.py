@@ -229,19 +229,32 @@ def _verify(client, plan, deep):
     for n in missing:
         log("  MISSING %s" % n)
     for n in extra:
-        log("  EXTRA   %s" % n)
+        # T12: extras are user-added ad-hoc workouts (tune-ups, time
+        # trials, make-up runs) that match our naming pattern but aren't
+        # in build_plan(). They're neither Garmin schema drift nor plan
+        # corruption, so they're logged as a warning and ignored rather
+        # than failing the canary -- a false-alarm here trains the user
+        # to dismiss the one alert that must stay trustworthy.
+        log("  EXTRA   %s (warn: not in plan -- user-added? ignored)" % n)
     if not deep:
-        return not missing and not extra
+        return not missing
 
     # NOTE (found while building G11's canary, fixed here rather than
     # worked around): this used to return True as long as every *present*
     # workout deep-checked clean, even if `missing`/`extra` above was
     # non-empty -- a vanished or renamed workout was logged but couldn't
-    # fail the boolean result. Folding it in here matches what the
-    # non-deep branch above already does.
-    ok = not missing and not extra
+    # fail the boolean result. Fixed to fold `missing` in (G11). Extras
+    # are intentionally excluded (T12 -- see above).
+    ok = not missing
     by_name = {p["name"]: p for p in plan}
+    plan_names = set(by_name)
     for i, (name, w) in enumerate(sorted(remote.items()), 1):
+        if name not in plan_names:
+            # Extra remote workout with no local counterpart (a user-added
+            # tune-up or make-up run). Warn-not-fail (T12): skip the deep
+            # check entirely so we never emit "FAIL ... no local counterpart".
+            progress(i, len(remote), "SKIP %s (extra, not in plan)" % name)
+            continue
         full = api(client, "/workout-service/workout/%s" % w["workoutId"])
         problems = _deep_check(full, by_name.get(name))
         if problems:

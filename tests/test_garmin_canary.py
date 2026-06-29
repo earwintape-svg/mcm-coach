@@ -84,11 +84,15 @@ class TestVerifyShallow:
         client = _FakeClient(summaries, details)
         assert _verify(client, PLAN, deep=False) is False
 
-    def test_fails_on_an_unexpected_extra_workout(self):
+    def test_extra_user_workout_does_not_fail_check(self):
+        """T12: an extra plan-named workout the user added (tune-up, time
+        trial, make-up run) must NOT trigger the canary. Before T12 this
+        asserted is False; the EM ruling is warn-not-fail so a legitimate
+        ad-hoc run doesn't desensitise the alert that matters."""
         summaries, details = _build_matching_remote(PLAN)
-        summaries = summaries + [{"workoutName": "W3 Tue Mystery Workout", "workoutId": "9999"}]
+        summaries = summaries + [{"workoutName": "W1 Fri 3mi Test", "workoutId": "9999"}]
         client = _FakeClient(summaries, details)
-        assert _verify(client, PLAN, deep=False) is False
+        assert _verify(client, PLAN, deep=False) is True
 
     def test_ignores_third_party_runna_workouts(self):
         """is_plan_name() excludes Runna's ' - ' naming -- a Runna
@@ -114,6 +118,22 @@ class TestVerifyDeep:
         summaries = summaries[1:]
         client = _FakeClient(summaries, details)
         assert _verify(client, PLAN, deep=True) is False
+
+    def test_extra_user_workout_does_not_fail_deep_check(self):
+        """T12: same warn-not-fail ruling for the deep path. The extra
+        workout is skipped in the deep loop (no `_deep_check` call, no
+        "no local counterpart" problem emitted) and doesn't affect ok."""
+        summaries, details = _build_matching_remote(PLAN)
+        # Add an extra plan-named workout with valid-ish structure so
+        # even if _deep_check were accidentally called it would compare
+        # against None (local counterpart) and fail -- we're asserting
+        # it's skipped entirely.
+        extra_wid = "9999"
+        summaries = summaries + [{"workoutName": "W1 Fri 3mi Test", "workoutId": extra_wid}]
+        details[extra_wid] = {"workoutSegments": copy.deepcopy(
+            details[summaries[0]["workoutId"]]["workoutSegments"])}
+        client = _FakeClient(summaries, details)
+        assert _verify(client, PLAN, deep=True) is True
 
     def test_fails_when_a_step_degrades_to_lap_button(self):
         """The exact Bug 7 shape: conditionTypeId 1 / lap.button where a

@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Timely — Redesign Demo</title>
+<style>
+:root{
+  --bg:#0e1116; --surface:#161b22; --raised:#1a212b; --hair:rgba(255,255,255,.06);
+  --tx:#f1f4f7; --dim:#93a0ad; --faint:#5b6671;
+  --mint:#5DCAA5; --mint-ink:#06231b; --coral:#F0997B;
+  /* workout-type = small dots only, desaturated */
+  --easy:#4ec08a; --strides:#56b9b4; --tempo:#d6a24e; --inter:#d97a72; --long:#6b9bd6;
+  /* type scale */
+  --t-display:30px; --t-title:20px; --t-head:16px; --t-body:14px; --t-cap:12px; --t-micro:10.5px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{background:radial-gradient(1100px 600px at 50% -10%,#15191f,#0a0c10);
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;gap:18px;
+  padding:34px 16px 60px;
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Helvetica,Arial,sans-serif;
+  color:var(--tx)}
+.intro{max-width:380px;text-align:center;color:#aeb7c2}
+.intro b{color:#fff;letter-spacing:-.3px}
+.intro span{display:inline-block;margin-top:6px;font-size:12.5px;color:var(--mint)}
+
+/* phone */
+.phone{width:382px;max-width:96vw;border-radius:48px;background:#000;padding:11px;
+  box-shadow:0 2px 5px rgba(0,0,0,.4),0 50px 90px -40px rgba(0,0,0,.7)}
+.device{position:relative;border-radius:38px;overflow:hidden;background:var(--bg);height:812px}
+.notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:112px;height:30px;
+  background:#000;border-radius:18px;z-index:60}
+.status{position:absolute;top:0;left:0;right:0;height:50px;display:flex;align-items:flex-end;
+  justify-content:space-between;padding:0 26px 7px;font-size:13px;font-weight:600;z-index:40;color:var(--tx)}
+.scroll{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;padding-top:50px;padding-bottom:96px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+
+/* sticky header (the ONE place we use a light floating treatment) */
+.hdr{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;
+  padding:8px 18px 11px;background:rgba(14,17,22,.82);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--hair)}
+.hdr .l{display:flex;align-items:center;gap:9px}
+.hdr .date{font-size:var(--t-cap);color:var(--dim)}
+.chip-ready{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mint);
+  background:rgba(93,202,165,.13);border:1px solid rgba(93,202,165,.28);border-radius:999px;padding:4px 11px}
+.dotpulse{width:7px;height:7px;border-radius:50%;background:var(--mint);animation:pulse 2.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.pad{padding:14px 16px 0}
+.eyebrow{font-size:var(--t-cap);letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:4px 2px 10px}
+
+/* HERO card — depth via shadow, no hard border */
+.hero{background:linear-gradient(162deg,#19251e,#121a16);border:1px solid rgba(93,202,165,.18);
+  border-radius:24px;padding:20px;box-shadow:0 26px 54px -32px rgba(93,202,165,.5),inset 0 1px 0 rgba(255,255,255,.05);
+  position:relative;overflow:hidden;opacity:0;transform:translateY(10px);animation:rise .6s .05s forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+.hero .kind{display:inline-flex;align-items:center;gap:7px;font-size:var(--t-cap);font-weight:600;color:var(--easy)}
+.hero .kind i{width:8px;height:8px;border-radius:50%;background:var(--easy)}
+.hero .big{font-size:var(--t-display);font-weight:800;letter-spacing:-1px;margin:8px 0 2px}
+.hero .wx{position:absolute;top:18px;right:18px;background:rgba(255,255,255,.05);border-radius:12px;
+  padding:8px 11px;text-align:right;font-size:11.5px;color:var(--dim)}
+.hero .twin{display:flex;gap:26px;margin:14px 0 2px}
+.hero .twin .lab{font-size:var(--t-micro);color:var(--faint);text-transform:uppercase;letter-spacing:.5px}
+.hero .twin .val{font-size:var(--t-title);font-weight:700;letter-spacing:-.3px;margin-top:3px}
+.hero .twin .val small{font-size:13px;color:var(--dim);font-weight:600}
+.hero .coachline{font-size:13px;color:#c2ecd9;margin-top:13px;line-height:1.5}
+.btn{width:100%;border:none;border-radius:14px;padding:14px;font-size:15px;font-weight:700;
+  font-family:inherit;cursor:pointer;transition:transform .08s,filter .15s}
+.btn:active{transform:scale(.985)}
+.btn.primary{background:var(--mint);color:var(--mint-ink)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.ghost{background:transparent;color:var(--mint);border:1px solid rgba(93,202,165,.35)}
+.hero .actions{margin-top:16px;display:flex;gap:9px}
+
+/* readiness strip */
+.strip{display:flex;gap:8px;margin-top:12px}
+.cell{flex:1;background:var(--surface);border-radius:15px;padding:12px 6px;text-align:center;cursor:pointer;
+  transition:background .15s,transform .08s;border:1px solid transparent}
+.cell:hover{background:var(--raised)}
+.cell:active{transform:scale(.97)}
+.cell .v{font-size:17px;font-weight:700}
+.cell .v.up{color:var(--mint)}
+.cell .k{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+
+/* unified week + countdown */
+.uline{display:flex;gap:10px;margin-top:12px}
+.card{background:var(--surface);border-radius:16px;padding:14px}
+.card.flex1{flex:1}
+.bar{background:#0f141a;border-radius:6px;height:7px;margin-top:9px;overflow:hidden}
+.bar i{display:block;height:7px;border-radius:6px;background:var(--mint);width:0;transition:width 1s .3s cubic-bezier(.2,.7,.3,1)}
+.count{font-size:22px;font-weight:800;letter-spacing:-.5px}
+.km{font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px}
+.foot{text-align:center;font-size:12px;color:var(--faint);margin:14px 0 4px}
+
+/* projected finish card (Today) — big + tappable */
+.projcard{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:18px;
+  padding:16px 18px;margin-top:12px;cursor:pointer;transition:background .15s,transform .08s;border:1px solid var(--hair)}
+.projcard:hover{background:var(--raised)}.projcard:active{transform:scale(.99)}
+.projcard .lab{font-size:var(--t-micro);color:var(--faint);text-transform:uppercase;letter-spacing:.5px}
+.projcard .ptime{font-size:32px;font-weight:800;letter-spacing:-1px;line-height:1.05;margin:3px 0 2px;color:var(--mint)}
+.projcard .psub{font-size:11.5px;color:var(--dim)}
+.projcard .mini{flex:none}
+.projcard .chev{color:var(--faint);font-size:20px}
+
+/* detail sheet content */
+#dcontent .dh{font-size:var(--t-cap);color:var(--faint);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px}
+#dcontent .dv{font-size:34px;font-weight:800;letter-spacing:-.8px}
+#dcontent .dv small{font-size:15px;color:var(--dim);font-weight:600}
+#dcontent .dbase{font-size:12.5px;color:var(--dim);margin-top:2px}
+#dcontent .dmean{font-size:13px;color:#c2ecd9;line-height:1.5;background:rgba(93,202,165,.07);
+  border-radius:12px;padding:11px 13px;margin:14px 0 4px}
+.projbig-wrap{position:relative;margin:10px 0 4px;cursor:crosshair}
+.goalline{stroke:var(--coral);stroke-width:1;stroke-dasharray:4 4;opacity:.7}
+.goaltag{fill:var(--coral);font-size:9px}
+
+/* section heading */
+.sec{display:flex;justify-content:space-between;align-items:baseline;margin:20px 2px 11px}
+.sec h3{margin:0;font-size:var(--t-head);font-weight:700}
+.sec a{font-size:var(--t-cap);color:var(--mint);text-decoration:none}
+
+/* PLAN week card + rows */
+.weekhero{background:linear-gradient(162deg,#19251e,#121a16);border:1px solid rgba(93,202,165,.16);
+  border-radius:20px;padding:16px;box-shadow:0 20px 46px -32px rgba(93,202,165,.45)}
+.weekhero .top{display:flex;justify-content:space-between;align-items:center}
+.weekhero .ph{font-size:var(--t-micro);color:var(--easy);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.row{display:flex;align-items:center;gap:12px;padding:13px 6px;border-bottom:1px solid var(--hair)}
+.row .rail{width:4px;align-self:stretch;border-radius:3px}
+.row .d{width:38px}
+.row .d .dw{font-size:var(--t-micro);color:var(--dim);text-transform:uppercase}
+.row .d .dn{font-size:16px;font-weight:700}
+.row .body{flex:1}
+.row .body .t{font-weight:600}
+.row .body .s{font-size:11.5px;color:var(--dim)}
+.pill{border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600}
+.pill.ok{background:rgba(93,202,165,.14);color:var(--mint)}
+.pill.up{color:var(--faint)}
+.row.today{background:rgba(93,202,165,.06);border-radius:12px}
+
+/* ACTIVITIES trajectory + interactive charts */
+.traj{background:linear-gradient(162deg,#19251e,#121a16);border:1px solid rgba(93,202,165,.16);
+  border-radius:20px;padding:16px;box-shadow:0 20px 46px -32px rgba(93,202,165,.45)}
+.spark-wrap{position:relative;margin-top:6px;cursor:crosshair}
+.spark-tip{position:absolute;transform:translate(-50%,-130%);background:#222b36;border:1px solid var(--hair);
+  border-radius:8px;padding:4px 9px;font-size:11px;white-space:nowrap;pointer-events:none;display:none;z-index:5}
+.kpis{display:flex;gap:8px;margin-top:12px}
+.kpi{flex:1;background:var(--surface);border-radius:14px;padding:12px 8px;text-align:center}
+.kpi .v{font-size:18px;font-weight:800}
+.pr{flex:1;background:var(--surface);border-radius:16px;padding:14px}
+.pr.medal{border:1px solid rgba(240,153,123,.35)}
+.pr .lab{font-size:11px;color:var(--dim)}
+.pr .v{font-size:22px;font-weight:800;letter-spacing:-.5px;margin-top:4px}
+.pr .v small{font-size:12px;color:var(--dim)}
+.pr .ago{font-size:11px;color:var(--faint);margin-top:2px}
+.gear{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:14px;padding:12px 14px;margin-top:8px}
+
+/* weekly bar chart (interactive) */
+.barchart{display:flex;align-items:flex-end;gap:4px;height:120px;margin-top:6px}
+.bc-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;cursor:pointer}
+.bc-bars{display:flex;gap:2px;align-items:flex-end;height:100px;width:100%;justify-content:center}
+.bc-bars span{width:7px;border-radius:3px 3px 0 0;height:0;transition:height .8s cubic-bezier(.2,.7,.3,1)}
+.bc-plan{background:#44505d}
+.bc-act{background:var(--mint)}
+.bc-col.sel .bc-bars span.bc-act{background:var(--coral)}
+.bc-lab{font-size:9px;color:var(--faint)}
+.bc-col.sel .bc-lab{color:var(--coral)}
+.bc-readout{font-size:12px;color:var(--dim);text-align:center;margin-top:10px;min-height:16px}
+.bc-readout b{color:var(--tx)}
+
+/* tab bar */
+.tabbar{position:absolute;bottom:0;left:0;right:0;display:flex;z-index:50;
+  background:rgba(14,17,22,.92);backdrop-filter:blur(16px);border-top:1px solid var(--hair);
+  padding:9px 0 24px}
+.tab{flex:1;display:flex;flex-direction:column;gap:3px;align-items:center;color:var(--dim);
+  font-size:10px;font-weight:600;cursor:pointer;transition:color .15s}
+.tab.on{color:var(--mint)}
+.tab svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+
+/* views */
+.view{display:none}
+.view.on{display:block;animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* log bottom sheet */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:70;opacity:0;pointer-events:none;
+  transition:opacity .25s}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:71;transform:translateY(100%);
+  transition:transform .32s cubic-bezier(.2,.8,.2,1);
+  background:linear-gradient(180deg,#171d25,#12161c);border-top:1px solid var(--hair);
+  border-radius:24px 24px 0 0;padding:8px 18px 26px;box-shadow:0 -24px 50px -20px rgba(0,0,0,.7)}
+.sheet.show{transform:none}
+.grab{width:38px;height:5px;border-radius:3px;background:#39424d;margin:0 auto 16px}
+.sheet .cele{text-align:center;margin-bottom:16px}
+.sheet .cele .tag{font-size:var(--t-cap);color:var(--easy);font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.sheet .cele .big{font-size:26px;font-weight:800;letter-spacing:-.5px;margin:6px 0 2px}
+.sheet .cele .sub{font-size:13px;color:var(--dim)}
+.seg-q{font-size:13px;color:var(--dim);margin-bottom:9px}
+.segs{display:flex;gap:6px;margin-bottom:16px}
+.seg{flex:1;background:#0f141a;border:1px solid var(--hair);border-radius:13px;padding:11px 0;text-align:center;
+  cursor:pointer;transition:transform .1s,background .15s,border-color .15s,box-shadow .15s}
+.seg:active{transform:scale(.94)}
+.seg .n{font-size:15px;font-weight:700;color:var(--dim)}
+.seg .nm{font-size:9px;color:var(--faint);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.seg.sel{box-shadow:0 8px 22px -8px var(--segc)}
+.seg.sel .n,.seg.sel .nm{color:var(--segc)}
+.field{width:100%;background:#0f141a;border:1px solid var(--hair);color:var(--tx);border-radius:12px;
+  padding:12px;font-size:15px;font-family:inherit;margin-bottom:10px}
+.shoe{display:flex;align-items:center;gap:10px;background:#0f141a;border:1px solid var(--hair);
+  border-radius:12px;padding:11px 13px;margin-bottom:16px;font-size:14px}
+.shoe .mi{margin-left:auto;font-size:11px;color:var(--faint)}
+
+/* toast */
+.toast{position:absolute;bottom:104px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:#222b36;border:1px solid var(--hair);color:var(--tx);border-radius:12px;padding:11px 16px;
+  font-size:13px;z-index:80;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
+  box-shadow:0 12px 34px rgba(0,0,0,.5);white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.good{border-color:rgba(93,202,165,.5)}
+</style></head>
+<body>
+
+<div class="intro"><b>Timely — redesign demo</b><br>Hybrid front-door · charcoal + mint + coral · interactive trends.
+<span>↓ tap around — switch tabs, log a run, scrub the charts</span></div>
+
+<div class="phone"><div class="device">
+  <div class="notch"></div>
+  <div class="status"><span>1:35</span><span>5G&nbsp;&nbsp;66%</span></div>
+
+  <div class="scroll" id="scroll">
+    <!-- shared glass header -->
+    <div class="hdr">
+      <div class="l">
+        <svg width="23" height="23" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#101418"/><path d="M20 20 L33 32 L20 44" fill="none" stroke="#5DCAA5" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path d="M36 24 L46 32 L36 40" fill="none" stroke="#F0997B" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="date" id="hdrdate">Fri, Jun 19</span>
+      </div>
+      <span class="chip-ready"><span class="dotpulse"></span>Ready</span>
+    </div>
+
+    <!-- ============ TODAY ============ -->
+    <div class="view on" id="v-today">
+      <div class="pad">
+        <div class="eyebrow">Today</div>
+        <div class="hero">
+          <div class="wx">61°&nbsp;·&nbsp;78%<br>light wind</div>
+          <div class="kind"><i></i>Easy run</div>
+          <div class="big">5 miles</div>
+          <div class="twin">
+            <div><div class="lab">Target pace</div><div class="val">9:30<small>–10:00</small></div></div>
+            <div><div class="lab">Effort</div><div class="val">Easy</div></div>
+          </div>
+          <div class="coachline">Keep it conversational. You slept 7.1h and Body Battery's at 71 — green light. Heat's mild, run by feel.</div>
+          <div class="actions">
+            <button class="btn primary" onclick="toast('Sent to your watch ▸',1)">Send to watch ▸</button>
+            <button class="btn ghost" style="flex:none;width:120px" onclick="openLog()">Log run</button>
+          </div>
+        </div>
+
+        <div class="strip">
+          <div class="cell" onclick="openDetail('rhr')"><div class="v">48</div><div class="k">RHR</div></div>
+          <div class="cell" onclick="openDetail('sleep')"><div class="v">7.1h</div><div class="k">Sleep</div></div>
+          <div class="cell" onclick="openDetail('form')"><div class="v up">+4</div><div class="k">Form</div></div>
+          <div class="cell" onclick="openDetail('battery')"><div class="v">71</div><div class="k">Battery</div></div>
+        </div>
+
+        <div class="uline">
+          <div class="card flex1">
+            <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--dim)">This week</span><span style="font-size:12px;color:var(--dim)">18 / 26 mi</span></div>
+            <div class="bar"><i id="weekbar"></i></div>
+          </div>
+          <div class="card" style="text-align:center"><div class="count" id="cd">0</div><div class="km">days to MCM</div></div>
+        </div>
+        <div class="projcard" onclick="openProj()">
+          <div style="flex:1">
+            <div class="lab">Projected finish</div>
+            <div class="ptime">3:22:40</div>
+            <div class="psub">On track for sub-3:25 ✓ · tap to see the trend</div>
+          </div>
+          <svg class="mini" width="62" height="34" viewBox="0 0 62 34"><polyline points="0,30 12,26 24,22 36,16 48,11 62,5" fill="none" stroke="#5DCAA5" stroke-width="2" stroke-linecap="round"/></svg>
+          <span class="chev">›</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ PLAN ============ -->
+    <div class="view" id="v-plan">
+      <div class="pad">
+        <div class="eyebrow">Plan · Week 1 of 20</div>
+        <div class="weekhero">
+          <div class="top">
+            <div><div class="ph">This week</div><div style="font-size:18px;font-weight:700;margin-top:3px">Week 1 — Base</div></div>
+            <div style="font-size:20px;font-weight:800;letter-spacing:-.5px">18<small style="font-size:12px;color:var(--dim);font-weight:600"> / 26 mi</small></div>
+          </div>
+          <div class="bar"><i class="planbar" style="width:0"></i></div>
+        </div>
+        <div style="margin-top:6px">
+          <div class="row" onclick="openWorkout('Mon Jun 15','4mi Easy','9:30–10:00/mi · easy',{ran:'3.7 mi',rpe:3})"><div class="rail" style="background:var(--easy)"></div><div class="d"><div class="dw">Mon</div><div class="dn">15</div></div><div class="body"><div class="t">4mi Easy</div><div class="s">9:30–10:00/mi</div></div><span class="pill ok">3.7 mi ✓</span></div>
+          <div class="row" onclick="openWorkout('Tue Jun 16','5mi Strides','6:30–7:00 surges · 8×20s',{ran:'5.0 mi',rpe:5})"><div class="rail" style="background:var(--strides)"></div><div class="d"><div class="dw">Tue</div><div class="dn">16</div></div><div class="body"><div class="t">5mi Strides</div><div class="s">6:30–7:00 surges</div></div><span class="pill ok">5.0 mi ✓</span></div>
+          <div class="row" onclick="openWorkout('Thu Jun 18','4mi Easy','9:30–10:00/mi · easy',{ran:'4.0 mi',rpe:4})"><div class="rail" style="background:var(--easy)"></div><div class="d"><div class="dw">Thu</div><div class="dn">18</div></div><div class="body"><div class="t">4mi Easy</div><div class="s">9:30–10:00/mi</div></div><span class="pill ok">4.0 mi ✓</span></div>
+          <div class="row today" onclick="openWorkout('Fri Jun 19 · Today','5mi Easy','9:30–10:00/mi · easy',{ran:'5.0 mi',rpe:4})"><div class="rail" style="background:var(--easy)"></div><div class="d"><div class="dw" style="color:var(--mint)">Fri</div><div class="dn" style="color:var(--mint)">19</div></div><div class="body"><div class="t">5mi Easy</div><div class="s">today</div></div><span class="pill ok">5.0 mi ✓</span></div>
+          <div class="row" style="border-bottom:none" onclick="openWorkout('Sat Jun 20','8mi Long Run','8:45–9:30/mi · aerobic',{upcoming:1})"><div class="rail" style="background:var(--long)"></div><div class="d"><div class="dw">Sat</div><div class="dn">20</div></div><div class="body"><div class="t">8mi Long Run</div><div class="s">8:45–9:30/mi</div></div><span class="pill up">upcoming ›</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ ACTIVITIES ============ -->
+    <div class="view" id="v-acts">
+      <div class="pad">
+        <div class="eyebrow">Activities</div>
+        <div class="traj">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:11px;color:var(--easy);font-weight:700;text-transform:uppercase;letter-spacing:.08em">Projected finish</div>
+            <div style="font-size:11px;color:var(--coral)">goal 3:25:00</div>
+          </div>
+          <div style="font-size:30px;font-weight:800;letter-spacing:-.7px;margin-top:2px" id="projHero">3:22:40</div>
+          <div style="font-size:12px;color:var(--mint)" id="projHeroSub">↓ 15s faster this week · 3 min ahead of goal</div>
+          <div class="projbig-wrap" id="projActsWrap">
+            <svg id="projActs" viewBox="0 0 300 92" style="width:100%;height:92px;display:block;overflow:visible">
+              <line class="goalline" id="projGoal" x1="0" x2="300"></line>
+              <text class="goaltag" x="2" id="projGoalTag">sub-3:25</text>
+              <polyline id="projActsLine" fill="none" stroke="#5DCAA5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle id="projActsDot" r="4" fill="#5DCAA5" style="display:none"/>
+            </svg>
+            <div class="spark-tip" id="projActsTip"></div>
+          </div>
+          <div style="font-size:11px;color:var(--faint);text-align:center;margin-top:2px">Your projected marathon time, day by day — scrub to replay it</div>
+        </div>
+
+        <div class="kpis">
+          <div class="kpi"><div class="v">75%</div><div class="km">On target</div></div>
+          <div class="kpi"><div class="v">4.0</div><div class="km">Avg RPE</div></div>
+          <div class="kpi"><div class="v">18</div><div class="km">Mi · 30d</div></div>
+        </div>
+
+        <div class="sec"><h3>Records</h3><a onclick="toast('All records ▸')">All ›</a></div>
+        <div style="display:flex;gap:10px">
+          <div class="pr medal"><div class="lab">🥇 Best 5K pace</div><div class="v">8:09<small>/mi</small></div><div class="ago">2 weeks ago</div></div>
+          <div class="pr"><div class="lab">Longest run</div><div class="v">8.0<small> mi</small></div><div class="ago">Jun 7</div></div>
+        </div>
+
+        <div class="sec"><h3>Weekly mileage</h3><span style="font-size:11px;color:var(--faint)">tap a week</span></div>
+        <div class="barchart" id="barchart"></div>
+        <div class="bc-readout" id="bcread">Planned vs actual — tap any week</div>
+
+        <div class="sec"><h3>Gear</h3></div>
+        <div class="gear"><span style="font-size:18px">👟</span><div style="flex:1"><div style="font-size:13.5px;font-weight:600">Nimbus 27 <span style="color:var(--faint);font-weight:400">· default</span></div><div class="bar" style="margin-top:6px"><i style="width:32%;background:var(--mint)"></i></div></div><div style="text-align:right"><div style="font-size:14px;font-weight:700">142</div><div style="font-size:10px;color:var(--faint)">/ 450 mi</div></div></div>
+        <div style="height:10px"></div>
+      </div>
+    </div>
+  </div><!-- /scroll -->
+
+  <!-- log sheet -->
+  <div class="scrim" id="scrim" onclick="closeLog()"></div>
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <div class="cele">
+      <div class="tag">Nice — run synced from your watch</div>
+      <div class="big">5.0 mi · 9:26/mi</div>
+      <div class="sub">Right on target for an easy day</div>
+    </div>
+    <div class="seg-q">How hard did that feel?</div>
+    <div class="segs" id="segs">
+      <div class="seg" data-c="#4ec08a" onclick="pickSeg(this)"><div class="n">1–2</div><div class="nm">Recov</div></div>
+      <div class="seg" data-c="#4ec08a" onclick="pickSeg(this)"><div class="n">3–4</div><div class="nm">Easy</div></div>
+      <div class="seg" data-c="#d6a24e" onclick="pickSeg(this)"><div class="n">5–6</div><div class="nm">Mod</div></div>
+      <div class="seg" data-c="#d97a72" onclick="pickSeg(this)"><div class="n">7–8</div><div class="nm">Hard</div></div>
+      <div class="seg" data-c="#d97a72" onclick="pickSeg(this)"><div class="n">9–10</div><div class="nm">Max</div></div>
+    </div>
+    <input class="field" placeholder="Add a note — sleep, legs, weather…">
+    <div class="shoe"><span>👟</span><span>Nimbus 27</span><span class="mi">default · 142 mi</span></div>
+    <button class="btn primary" id="savebtn" onclick="saveRun()" style="opacity:.5">Pick an effort to save</button>
+  </div>
+
+  <!-- generic detail sheet (readiness / workout / projection) -->
+  <div class="scrim" id="dscrim" onclick="closeDetail()"></div>
+  <div class="sheet" id="dsheet"><div class="grab"></div><div id="dcontent"></div></div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- tab bar -->
+  <div class="tabbar">
+    <div class="tab on" data-v="today" onclick="go('today',this)"><svg viewBox="0 0 24 24"><path d="M7 4l9 8-9 8"/></svg>Today</div>
+    <div class="tab" data-v="plan" onclick="go('plan',this)"><svg viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="15" rx="3"/><path d="M3.5 10.5h17M8.5 3.5v4M15.5 3.5v4"/></svg>Plan</div>
+    <div class="tab" data-v="acts" onclick="go('acts',this)"><svg viewBox="0 0 24 24"><path d="M5 20v-6M12 20V5M19 20v-9"/></svg>Activities</div>
+  </div>
+</div></div>
+
+<script>
+function buzz(ms){try{navigator.vibrate&&navigator.vibrate(ms||10)}catch(e){}}
+
+/* tab switching */
+function go(v,el){
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+  document.getElementById('v-'+v).classList.add('on');
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('scroll').scrollTop=0;
+  buzz(8);
+  if(v==='acts'){drawActsProj();growBars();}
+  if(v==='plan'){setTimeout(()=>document.querySelector('.planbar').style.width='69%',60);}
+}
+
+/* toast */
+let tt;
+function toast(msg,good){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show'+(good?' good':'');
+  buzz(8); clearTimeout(tt); tt=setTimeout(()=>t.className='toast',1800);
+}
+
+/* log sheet */
+function openLog(){document.getElementById('scrim').classList.add('show');document.getElementById('sheet').classList.add('show');buzz(10);}
+function closeLog(){document.getElementById('scrim').classList.remove('show');document.getElementById('sheet').classList.remove('show');}
+let chosen=null;
+function pickSeg(el){
+  document.querySelectorAll('#segs .seg').forEach(s=>{s.classList.remove('sel');s.style.removeProperty('--segc')});
+  el.classList.add('sel'); el.style.setProperty('--segc',el.dataset.c);
+  chosen=el.querySelector('.n').textContent; buzz(14);
+  const b=document.getElementById('savebtn'); b.style.opacity='1'; b.textContent='Save run ✓';
+}
+function saveRun(){
+  if(!chosen){toast('Pick an effort first');return;}
+  closeLog(); toast('Saved · effort '+chosen+' ✓',1);
+  chosen=null;
+}
+
+/* count up days-to-race */
+function countUp(){
+  const el=document.getElementById('cd'); let n=0; const tgt=128;
+  const iv=setInterval(()=>{n+=4; if(n>=tgt){n=tgt;clearInterval(iv)} el.textContent=n;},16);
+}
+
+/* ===== projected-finish-time timelapse (replaces VDOT) ===== */
+const PROJ=[['Apr 6',13320],['Apr 20',13150],['May 4',12960],['May 18',12800],
+  ['Jun 1',12640],['Jun 8',12510],['Jun 12',12410],['Jun 15',12310],['Jun 17',12210],['Jun 19',12160]];
+const GOAL=12300; // sub-3:25
+function fmtT(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),x=s%60;
+  return h+':'+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');}
+function renderProj(o){
+  const W=300,H=o.h,padT=10,padB=18;
+  const times=PROJ.map(p=>p[1]); const mn=Math.min(...times,GOAL),mx=Math.max(...times,GOAL),sp=(mx-mn)||1;
+  const yOf=s=>padT+((s-mn)/sp)*(H-padT-padB); // faster (lower sec) sits higher
+  const pts=PROJ.map((p,i)=>[(i/(PROJ.length-1))*W,yOf(p[1])]);
+  const line=document.getElementById(o.line);
+  line.setAttribute('points',pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' '));
+  if(o.goal){const gy=yOf(GOAL).toFixed(1);const gl=document.getElementById(o.goal);
+    gl.setAttribute('y1',gy);gl.setAttribute('y2',gy);
+    if(o.goalTag)document.getElementById(o.goalTag).setAttribute('y',(parseFloat(gy)-3));}
+  if(!line.dataset.drawn){line.dataset.drawn='1';const len=line.getTotalLength?line.getTotalLength():520;
+    line.style.strokeDasharray=len;line.style.strokeDashoffset=len;
+    requestAnimationFrame(()=>{line.style.transition='stroke-dashoffset 1.2s ease';line.style.strokeDashoffset=0;});}
+  const wrap=document.getElementById(o.wrap),dot=document.getElementById(o.dot),tip=document.getElementById(o.tip);
+  if(wrap.dataset.wired)return; wrap.dataset.wired='1';
+  function at(e){const r=wrap.getBoundingClientRect();
+    const cx=((e.touches?e.touches[0].clientX:e.clientX)-r.left)/r.width;
+    let i=Math.round(cx*(PROJ.length-1));i=Math.max(0,Math.min(PROJ.length-1,i));
+    const p=pts[i];dot.style.display='';dot.setAttribute('cx',p[0]);dot.setAttribute('cy',p[1]);
+    tip.style.display='block';tip.style.left=(p[0]/W*r.width)+'px';tip.style.top=(p[1]/H*r.height)+'px';
+    tip.innerHTML=PROJ[i][0]+' · <b>'+fmtT(PROJ[i][1])+'</b>';}
+  function offf(){dot.style.display='none';tip.style.display='none';}
+  wrap.addEventListener('mousemove',at);wrap.addEventListener('mouseleave',offf);
+  wrap.addEventListener('touchstart',at,{passive:true});wrap.addEventListener('touchmove',at,{passive:true});
+  wrap.addEventListener('touchend',offf);
+}
+function drawActsProj(){renderProj({wrap:'projActsWrap',line:'projActsLine',dot:'projActsDot',
+  tip:'projActsTip',goal:'projGoal',goalTag:'projGoalTag',h:92});}
+
+/* ===== detail sheet (readiness / workout / projection) ===== */
+function showDetail(){document.getElementById('dscrim').classList.add('show');document.getElementById('dsheet').classList.add('show');buzz(10);}
+function closeDetail(){document.getElementById('dscrim').classList.remove('show');document.getElementById('dsheet').classList.remove('show');}
+function miniSpark(vals,color){const w=300,h=40,mn=Math.min(...vals),mx=Math.max(...vals),sp=(mx-mn)||1;
+  const pts=vals.map((v,i)=>((i/(vals.length-1))*w).toFixed(1)+','+(h-4-((v-mn)/sp)*(h-8)).toFixed(1)).join(' ');
+  return '<svg viewBox="0 0 '+w+' '+h+'" style="width:100%;height:40px;margin:12px 0 2px"><polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';}
+const READ={
+  rhr:{h:'Resting heart rate',v:'48',u:'bpm',base:'7-day baseline 50 · ▼2',c:'#56b9b4',
+    trend:[52,51,50,50,49,48,48],mean:'Resting HR drifting down at the same training load is a sign you’re absorbing the work. A jump of 5+ over baseline is an early flag to ease off.'},
+  sleep:{h:'Sleep',v:'7.1',u:'h',base:'7-day avg 6.8h · above your norm',c:'#6b9bd6',
+    trend:[6.2,7.4,6.0,7.1,6.5,7.0,7.1],mean:'Under 7h tends to cost ~10–15s/mi at the same effort and blunts recovery. Tonight is a quality-day eve — protect it.'},
+  form:{h:'Form (CTL − ATL)',v:'+4',u:'',base:'Fresh — fitness slightly ahead of fatigue',c:'#5DCAA5',
+    trend:[-6,-3,-1,1,2,3,4],mean:'Positive means you’re fresh and ready for a hard effort. Sustained negative is normal mid-block; lingering negative into a quality week is the flag.'},
+  battery:{h:'Body Battery',v:'71',u:'',base:'Garmin energy · charged from 22 overnight',c:'#4ec08a',
+    trend:[40,55,30,60,48,66,71],mean:'Garmin’s 0–100 energy estimate from HRV, stress and rest. 70+ on an easy-day morning is a green light; under 30 before a quality session is worth a second look.'}
+};
+function openDetail(key){
+  const d=READ[key];
+  document.getElementById('dcontent').innerHTML=
+    '<div class="dh">'+d.h+'</div>'+
+    '<div class="dv">'+d.v+(d.u?' <small>'+d.u+'</small>':'')+'</div>'+
+    '<div class="dbase">'+d.base+'</div>'+
+    miniSpark(d.trend,d.c)+
+    '<div style="font-size:11px;color:var(--faint);text-align:center">last 7 days</div>'+
+    '<div class="dmean">'+d.mean+'</div>'+
+    '<button class="btn ghost" style="margin-top:14px" onclick="closeDetail()">Close</button>';
+  showDetail();
+}
+function openWorkout(date,title,sub,opts){
+  opts=opts||{};
+  const status=opts.upcoming?'<span class="pill up">upcoming</span>':
+    '<span class="pill ok">ran '+opts.ran+' · RPE '+opts.rpe+'</span>';
+  document.getElementById('dcontent').innerHTML=
+    '<div class="dh">'+date+'</div>'+
+    '<div class="dv" style="font-size:24px">'+title+'</div>'+
+    '<div class="dbase">'+sub+'</div>'+
+    '<div style="margin:14px 0">'+status+'</div>'+
+    (opts.upcoming
+      ? '<div class="dmean">Your prescribed long run. Start easy, settle into 9:00–9:30, control the last 2. We’ll push the structured workout to your watch.</div>'+
+        '<button class="btn primary" onclick="closeDetail();toast(\'Sent to your watch ▸\',1)">Send to watch ▸</button>'
+      : '<div class="dmean">Right on target — pace and effort matched the plan, and it’s counted toward your week and your finish-time projection.</div>'+
+        '<button class="btn ghost" onclick="closeDetail()">Close</button>');
+  showDetail();
+}
+function openProj(){
+  document.getElementById('dcontent').innerHTML=
+    '<div class="dh">Projected finish · MCM</div>'+
+    '<div class="dv">3:22:40 <small>↓ 15s this week</small></div>'+
+    '<div class="dbase">Goal sub-3:25 · 3 min of cushion · updates after every run</div>'+
+    '<div class="projbig-wrap" id="pjW"><svg id="pjS" viewBox="0 0 300 120" style="width:100%;height:120px;display:block;overflow:visible">'+
+      '<line class="goalline" id="pjGoal" x1="0" x2="300"></line><text class="goaltag" x="2" id="pjGoalTag">sub-3:25</text>'+
+      '<polyline id="pjLine" fill="none" stroke="#5DCAA5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'+
+      '<circle id="pjDot" r="4" fill="#5DCAA5" style="display:none"/></svg><div class="spark-tip" id="pjTip"></div></div>'+
+    '<div style="font-size:11px;color:var(--faint);text-align:center">Each point is a day in your block — scrub to replay how it has dropped</div>'+
+    '<div class="dmean">Computed from your training runs (Daniels VDOT) and adjusted for the long-run progression still ahead. The <b>trend</b> matters more than any single day — races usually read a touch faster than this training-run floor.</div>'+
+    '<button class="btn ghost" style="margin-top:14px" onclick="closeDetail()">Close</button>';
+  showDetail();
+  setTimeout(()=>renderProj({wrap:'pjW',line:'pjLine',dot:'pjDot',tip:'pjTip',goal:'pjGoal',goalTag:'pjGoalTag',h:120}),30);
+}
+
+/* interactive weekly bar chart */
+const WK=[{w:1,p:26,a:18},{w:2,p:29,a:30},{w:3,p:24,a:24},{w:4,p:32,a:31},{w:5,p:34,a:0},{w:6,p:30,a:0},{w:7,p:36,a:0},{w:8,p:28,a:0}];
+function buildBars(){
+  const max=Math.max(...WK.map(x=>Math.max(x.p,x.a)));
+  const bc=document.getElementById('barchart'); bc.innerHTML='';
+  WK.forEach(x=>{
+    const col=document.createElement('div'); col.className='bc-col'+(x.w===3?' sel':'');
+    col.innerHTML='<div class="bc-bars"><span class="bc-plan" data-h="'+(x.p/max*100)+'"></span>'+
+      (x.a?'<span class="bc-act" data-h="'+(x.a/max*100)+'"></span>':'')+'</div><div class="bc-lab">W'+x.w+'</div>';
+    col.onclick=()=>{
+      document.querySelectorAll('.bc-col').forEach(c=>c.classList.remove('sel'));
+      col.classList.add('sel'); buzz(10);
+      document.getElementById('bcread').innerHTML='Week '+x.w+' — planned <b>'+x.p+' mi</b>'+
+        (x.a?' · ran <b style="color:var(--coral)">'+x.a+' mi</b> ('+Math.round(x.a/x.p*100)+'%)':' · <span style="color:var(--faint)">upcoming</span>');
+    };
+    bc.appendChild(col);
+  });
+}
+let barsGrown=false;
+function growBars(){
+  if(!document.getElementById('barchart').children.length)buildBars();
+  if(barsGrown)return; barsGrown=true;
+  setTimeout(()=>document.querySelectorAll('.bc-bars span').forEach(s=>s.style.height=s.dataset.h+'%'),60);
+}
+
+/* boot */
+window.addEventListener('load',()=>{
+  document.getElementById('weekbar').style.width='69%';
+  countUp(); buildBars();
+  const d=new Date(); /* keep demo label */
+});
+</script>
+</body></html>
